@@ -41,6 +41,25 @@ start a thread in a project when you need that. Chats need Claude Code installed
 and signed in, and follow the same availability rule as threads without a
 project.
 
+#### Chat mode
+
+To make T3 Code work like Claude Desktop, switch to **Chat** mode with the
+mode button at the bottom of the sidebar, **Switch to Chat mode** in the
+command palette, or **Settings → General → Chats → Mode**. The sidebar then
+lists only your Claude chats, the new-thread button and `mod+n` start a chat,
+and the app opens on a new chat. Switch back to **Code** for project work.
+
+#### Import your Claude conversations
+
+claude.ai and Claude Desktop keep your chats on Anthropic's servers, so they
+come in through Claude's export: in Claude, open **Settings → Privacy → Export
+data**, then download the zip Claude emails you. In T3 Code, choose **Import
+Claude conversations…** in the command palette, **Settings → General → Chats →
+Import from Claude**, or **Import chats…** on the welcome screen, and pick the
+folder holding the zip (or the folder you unzipped it into). Each conversation
+becomes a chat you can continue: Claude gets the earlier conversation back as
+context. Importing the same export again skips chats already imported.
+
 ### Start in the background
 
 In a desktop browser or the desktop app, press `Cmd+Enter` on macOS or `Ctrl+Enter`

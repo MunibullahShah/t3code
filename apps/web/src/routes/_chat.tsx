@@ -42,6 +42,7 @@ function ChatRouteGlobalShortcuts() {
   );
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const legacySidebarEnabled = useLegacySidebarEnabled();
+  const chatMode = useClientSettings((s) => s.appMode) === "chat";
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const projects = useProjects();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -136,6 +137,13 @@ function ChatRouteGlobalShortcuts() {
       if (command === "chat.new") {
         event.preventDefault();
         event.stopPropagation();
+        if (chatMode) {
+          const environmentId = chatEnvironmentId(
+            activeThread?.environmentId ?? activeDraftThread?.environmentId ?? primaryEnvironmentId,
+          );
+          if (environmentId !== null) void startChatThread(environmentId);
+          return;
+        }
         if (!legacySidebarEnabled && projectGroupCount > 1) {
           openCommandPalette({ open: "new-thread-in" });
           return;
@@ -213,6 +221,7 @@ function ChatRouteGlobalShortcuts() {
     startScratchThread,
     startChatThread,
     legacySidebarEnabled,
+    chatMode,
     terminalOpen,
   ]);
 

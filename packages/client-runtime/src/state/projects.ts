@@ -144,6 +144,22 @@ export function isScratchProject(
   );
 }
 
+/** Sidebar scope keys (`environmentId:projectId`) of each environment's Chats project. */
+export function chatProjectScopeKeys(
+  projects: ReadonlyArray<{
+    readonly environmentId: string;
+    readonly id: string;
+    readonly workspaceRoot: string;
+  }>,
+  chatWorkspaceRootFor: (environmentId: string) => string | null | undefined,
+): ReadonlySet<string> {
+  return new Set(
+    projects
+      .filter((project) => isScratchProject(project, chatWorkspaceRootFor(project.environmentId)))
+      .map((project) => `${project.environmentId}:${project.id}`),
+  );
+}
+
 export function inferProjectTitleFromPath(value: string): string {
   const normalized = normalizeProjectPathForDispatch(value);
   const absolutePath = splitAbsolutePath(normalized);

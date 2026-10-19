@@ -1,4 +1,5 @@
 import { useAuth } from "@clerk/react";
+import { ClaudeChatsImportCallout } from "./ClaudeChatsImportCallout";
 import { useAtomValue } from "@effect/atom-react";
 import type {
   AgentSessionProjectCandidate,
@@ -1495,6 +1496,7 @@ function ImportStep({
       {visibleImportError ? (
         <p className="mt-3 text-sm text-destructive">{visibleImportError}</p>
       ) : null}
+      <ClaudeChatsImportCallout />
       <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
         <Button variant="ghost-muted" disabled={isImporting} onClick={finishAfterImport}>
           Do not import projects

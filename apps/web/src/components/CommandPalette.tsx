@@ -60,6 +60,8 @@ import {
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
   CheckIcon,
+  CodeXmlIcon,
+  DownloadIcon,
   ChevronRightIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
@@ -70,6 +72,7 @@ import {
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
+  MessagesSquareIcon,
   MonitorIcon,
   MoonIcon,
   PaletteIcon,
@@ -104,7 +107,8 @@ import {
   copyPromptLink,
   promptLinkRepositoryOf,
 } from "./promptLinks/copyPromptLink";
-import { useClientSettings } from "../hooks/useSettings";
+import { updateClientSettings, useClientSettings } from "../hooks/useSettings";
+import { useClaudeExportImport } from "../hooks/useClaudeExportImport";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { useTheme } from "../hooks/useTheme";
 import { useCustomThemes } from "../hooks/useCustomThemes";
@@ -447,6 +451,7 @@ const selectCommandPaletteClientSettings = (settings: ClientSettings) => ({
   sidebarProjectGroupingOverrides: settings.sidebarProjectGroupingOverrides,
   sidebarProjectSortOrder: settings.sidebarProjectSortOrder,
   sidebarThreadSortOrder: settings.sidebarThreadSortOrder,
+  appMode: settings.appMode,
 });
 
 function useSortedProjectGroups(environmentLabelById: ReadonlyMap<EnvironmentId, string>) {
@@ -727,6 +732,7 @@ function OpenCommandPaletteDialog(props: {
     chatEnvironmentId,
     startChatThread,
   } = useScratchProject();
+  const { importClaudeExport } = useClaudeExportImport();
   const lookupRepository = useAtomQueryRunner(sourceControlEnvironment.repository, {
     reportFailure: false,
   });
@@ -1629,6 +1635,29 @@ function OpenCommandPaletteDialog(props: {
   }
 
   if (chatTargetEnvironmentId !== null) {
+    const chatMode = clientSettings.appMode === "chat";
+    actionItems.push({
+      kind: "action",
+      value: "action:toggle-app-mode",
+      searchTerms: ["mode", "chat mode", "code mode", "claude desktop", "projects", "switch"],
+      title: chatMode ? "Switch to Code mode" : "Switch to Chat mode",
+      icon: chatMode ? (
+        <CodeXmlIcon className={ITEM_ICON_CLASS} />
+      ) : (
+        <MessagesSquareIcon className={ITEM_ICON_CLASS} />
+      ),
+      run: async () => {
+        await updateClientSettings({ appMode: chatMode ? "code" : "chat" });
+      },
+    });
+    actionItems.push({
+      kind: "action",
+      value: "action:import-claude-chats",
+      searchTerms: ["import", "claude.ai", "claude desktop", "export", "conversations", "history"],
+      title: "Import Claude conversations…",
+      icon: <DownloadIcon className={ITEM_ICON_CLASS} />,
+      run: importClaudeExport,
+    });
     actionItems.push({
       kind: "action",
       value: "action:new-claude-chat",

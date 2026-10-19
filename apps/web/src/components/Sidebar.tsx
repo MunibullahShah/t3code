@@ -177,7 +177,8 @@ import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import { buildThreadRouteParams, resolveActiveThreadRouteRef } from "../threadRoutes";
 import { formatRelativeTimeLabel, parseTimestampDate } from "../timestampFormat";
 import type { SidebarThreadSummary } from "../types";
-import { isScratchProject } from "@t3tools/client-runtime/state/projects";
+import { chatProjectScopeKeys, isScratchProject } from "@t3tools/client-runtime/state/projects";
+import { useScratchProject } from "../hooks/useScratchProject";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { cn } from "~/lib/utils";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
@@ -2706,6 +2707,8 @@ export default function Sidebar() {
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
+  const chatMode = useClientSettings((s) => s.appMode) === "chat";
+  const { chatEnvironmentId, startChatThread } = useScratchProject();
   const {
     settleThread,
     unsettleThread,
@@ -2884,7 +2887,7 @@ export default function Sidebar() {
     projectScopeKey === null
       ? null
       : (projectGroups.find((project) => project.projectKey === projectScopeKey) ?? null);
-  const scopedProjectKeys =
+  const pickedProjectKeys =
     scopedProjectGroup === null
       ? null
       : new Set(
@@ -2892,6 +2895,14 @@ export default function Sidebar() {
             (projectRef) => `${projectRef.environmentId}:${projectRef.projectId}`,
           ),
         );
+  // Chat mode lists only Claude chats, whatever project the picker last held.
+  const scopedProjectKeys = chatMode
+    ? chatProjectScopeKeys(
+        projects,
+        (environmentId) =>
+          serverConfigs.get(environmentId as EnvironmentId)?.chatWorkspaceRoot ?? null,
+      )
+    : pickedProjectKeys;
   useEffect(() => {
     const nextKey = resolveSidebarProjectScopeKey({
       groups: projectGroups,
@@ -4509,7 +4520,14 @@ export default function Sidebar() {
     updateThreadJumpHintsVisibility(shouldShowJumpHintsNow);
   }, [shouldShowJumpHintsNow, updateThreadJumpHintsVisibility]);
 
+  const chatTargetEnvironmentId = chatMode ? chatEnvironmentId(null) : null;
   const handleNewThreadClick = (event?: ReactMouseEvent) => {
+    if (chatMode) {
+      if (chatTargetEnvironmentId === null) return;
+      if (isMobile) setOpenMobile(false);
+      void startChatThread(chatTargetEnvironmentId);
+      return;
+    }
     if (shouldCreateNewThreadInCurrentProject(event?.shiftKey ?? false, projectGroups.length)) {
       if (isMobile) setOpenMobile(false);
       void startNewThreadFromContext({
@@ -4538,7 +4556,8 @@ export default function Sidebar() {
           <SidebarGroup className="z-[1]">
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}
-              hasProjects={projectGroups.length > 0}
+              hasProjects={!chatMode && projectGroups.length > 0}
+              newThreadText={chatMode ? "New chat" : "New thread"}
               projectScope={
                 <Combobox
                   items={projectScopeItems}
@@ -4665,10 +4684,12 @@ export default function Sidebar() {
               }
               onNewProject={openAddProjectCommandPalette}
               onNewThread={handleNewThreadClick}
-              newThreadDisabled={projects.length === 0}
+              newThreadDisabled={
+                chatMode ? chatTargetEnvironmentId === null : projects.length === 0
+              }
               newThreadShortcutLabel={newThreadShortcutLabel}
               newThreadInProjectShortcutLabel={newThreadInProjectShortcutLabel}
-              showNewThreadInProjectHint={projectGroups.length > 1}
+              showNewThreadInProjectHint={!chatMode && projectGroups.length > 1}
               searchInputRef={threadSearchInputRef}
               searchQuery={threadSearchQuery}
               onSearchQueryChange={(value) => {

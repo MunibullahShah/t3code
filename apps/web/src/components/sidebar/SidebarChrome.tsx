@@ -1,7 +1,9 @@
 import {
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
+  CodeXmlIcon,
   MessageCircleIcon,
+  MessagesSquareIcon,
   SettingsIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -9,7 +11,11 @@ import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useScratchProject } from "../../hooks/useScratchProject";
-import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
+import {
+  updateClientSettings,
+  useClientSettings,
+  useEnvironmentIdentificationMode,
+} from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
 import { T3Wordmark } from "../T3Wordmark";
@@ -172,6 +178,10 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const pullRequestsSupported = usePullRequestsSupported();
   const { chatEnvironmentId, startChatThread } = useScratchProject();
   const chatTargetEnvironmentId = chatEnvironmentId(null);
+  const chatMode = useClientSettings((settings) => settings.appMode) === "chat";
+  const handleModeToggle = () => {
+    void updateClientSettings({ appMode: chatMode ? "code" : "chat" });
+  };
   const handleNewChatClick = () => {
     if (chatTargetEnvironmentId === null) return;
     closeMobileSidebar();
@@ -218,11 +228,20 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
       ) : (
         <>
           {chatTargetEnvironmentId !== null ? (
-            <SidebarUtilityItem
-              icon={<MessageCircleIcon />}
-              label="New Claude chat"
-              onClick={handleNewChatClick}
-            />
+            <>
+              <SidebarUtilityItem
+                icon={chatMode ? <CodeXmlIcon /> : <MessagesSquareIcon />}
+                label={chatMode ? "Switch to Code mode" : "Switch to Chat mode"}
+                onClick={handleModeToggle}
+              />
+              {chatMode ? null : (
+                <SidebarUtilityItem
+                  icon={<MessageCircleIcon />}
+                  label="New Claude chat"
+                  onClick={handleNewChatClick}
+                />
+              )}
+            </>
           ) : null}
           <SidebarUtilityItem
             icon={<SettingsIcon />}

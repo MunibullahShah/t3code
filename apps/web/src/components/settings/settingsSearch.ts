@@ -575,6 +575,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["composer meter usage tokens circle old"],
   },
   {
+    id: "app-mode",
+    title: "Mode",
+    to: "/settings/general",
+    searchTerms: ["chat code claude desktop interface layout projects sidebar"],
+  },
+  {
+    id: "import-claude-chats",
+    title: "Import from Claude",
+    to: "/settings/general",
+    searchTerms: ["claude.ai desktop conversations export history import chats"],
+  },
+  {
     id: "legacy-sidebar",
     title: "Sidebar (legacy)",
     to: "/settings/general",

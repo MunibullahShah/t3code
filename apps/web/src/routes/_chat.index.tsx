@@ -13,6 +13,8 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/
 import { SidebarInset } from "../components/ui/sidebar";
 import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { useScratchProject } from "../hooks/useScratchProject";
+import { useClientSettings } from "../hooks/useSettings";
 import {
   readProject,
   useAllEnvironmentShellsBootstrapped,
@@ -32,7 +34,29 @@ function ChatIndexRouteView() {
     if (environments.length === 0) return <HostedStaticOnboardingState />;
   }
 
-  return <IndexDraftLanding />;
+  return <IndexLanding />;
+}
+
+function IndexLanding() {
+  const chatMode = useClientSettings((s) => s.appMode) === "chat";
+  return chatMode ? <ChatModeLanding /> : <IndexDraftLanding />;
+}
+
+/** Chat mode opens on a fresh Claude chat, like Claude Desktop. */
+function ChatModeLanding() {
+  const { chatEnvironmentId, startChatThread } = useScratchProject();
+  const router = useRouter();
+  const isStillOnIndex = useEffectEvent(() => router.state.location.pathname === "/");
+  const environmentId = chatEnvironmentId(null);
+  const startedRef = useRef(false);
+
+  useEffect(() => {
+    if (environmentId === null || startedRef.current || !isStillOnIndex()) return;
+    startedRef.current = true;
+    void startChatThread(environmentId, { replace: true });
+  }, [environmentId, startChatThread]);
+
+  return environmentId === null ? <IndexDraftLanding /> : null;
 }
 
 function IndexDraftLanding() {

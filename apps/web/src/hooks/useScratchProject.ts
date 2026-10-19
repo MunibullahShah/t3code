@@ -88,10 +88,14 @@ export function useScratchProject() {
   const openScratchProject = (environmentId: EnvironmentId, failureTitle?: string) =>
     openManagedProject(environmentId, "scratch", failureTitle);
 
-  const startManagedThread = async (environmentId: EnvironmentId, kind: ManagedProjectKind) => {
+  const startManagedThread = async (
+    environmentId: EnvironmentId,
+    kind: ManagedProjectKind,
+    options?: { readonly replace?: boolean },
+  ) => {
     const project = await openManagedProject(environmentId, kind);
     if (project) {
-      await handleNewThread(scopeProjectRef(project.environmentId, project.id)).catch(
+      await handleNewThread(scopeProjectRef(project.environmentId, project.id), options).catch(
         (error: unknown) => reportScratchFailure(FAILURE_TITLE[kind], error),
       );
     }
@@ -100,8 +104,10 @@ export function useScratchProject() {
   const startScratchThread = (environmentId: EnvironmentId) =>
     startManagedThread(environmentId, "scratch");
 
-  const startChatThread = (environmentId: EnvironmentId) =>
-    startManagedThread(environmentId, "chat");
+  const startChatThread = (
+    environmentId: EnvironmentId,
+    options?: { readonly replace?: boolean },
+  ) => startManagedThread(environmentId, "chat", options);
 
   return {
     scratchWorkspaceRootFor,
