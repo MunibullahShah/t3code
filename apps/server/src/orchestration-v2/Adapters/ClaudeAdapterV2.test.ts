@@ -217,6 +217,57 @@ function makeClaudeTestTurnInput(input: {
 }
 
 describe("ClaudeAdapterV2 runtime query policy", () => {
+  it("runs chat threads with no tools, no MCP and the chat persona", () => {
+    const queryPolicy = ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy({
+      ...CLAUDE_TEST_RUNTIME_POLICY,
+      runtimeMode: "full-access",
+      chatOnly: true,
+    });
+    assert.deepEqual(queryPolicy.tools, []);
+    assert.equal(queryPolicy.permissionMode, "default");
+    assert.isFalse(queryPolicy.installPermissionCallback);
+    assert.isUndefined(queryPolicy.allowDangerouslySkipPermissions);
+
+    const options = ClaudeAdapterV2.makeClaudeQueryOptions({
+      modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+      nativeThreadId: "chat-thread",
+      resume: false,
+      cwd: "/home/user/.t3/chats/2026-10-19-hello",
+      tools: queryPolicy.tools ?? [],
+      mcpServers: { "t3-code": { type: "http", url: "http://127.0.0.1/mcp" } },
+      chatOnly: true,
+    });
+    assert.deepEqual(options.tools, []);
+    assert.isUndefined(options.mcpServers);
+    assert.equal(options.systemPrompt, ClaudeAdapterV2.CLAUDE_CHAT_SYSTEM_PROMPT);
+  });
+
+  it("keys chat and coding queries apart so a live process is never reused across them", () => {
+    const coding = ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy({
+      ...CLAUDE_TEST_RUNTIME_POLICY,
+      runtimeMode: "approval-required",
+    });
+    const chat = ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy({
+      ...CLAUDE_TEST_RUNTIME_POLICY,
+      runtimeMode: "approval-required",
+      chatOnly: true,
+    });
+    assert.notEqual(
+      ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(coding, {}),
+      ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(chat, {}),
+    );
+  });
+
+  it("keeps the Claude Code persona for coding threads", () => {
+    const options = ClaudeAdapterV2.makeClaudeQueryOptions({
+      modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+      nativeThreadId: "code-thread",
+      resume: false,
+      cwd: "/workspace",
+    });
+    assert.include(options.systemPrompt as object, { type: "preset", preset: "claude_code" });
+  });
+
   it.each([false, true])("requests thinking summaries with resume=%s", (resume) => {
     const options = ClaudeAdapterV2.makeClaudeQueryOptions({
       modelSelection: CLAUDE_TEST_MODEL_SELECTION,

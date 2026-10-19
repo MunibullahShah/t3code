@@ -31,6 +31,16 @@ folder, so the files the agent wrote stay until you delete them. Branch, worktre
 these folders are not Git repositories. This is unavailable when the data
 directory itself sits inside a Git checkout.
 
+### Chat with Claude
+
+For a plain conversation with Claude, like in Claude Desktop, click **New Claude
+chat** at the bottom of the sidebar, pick it from the command palette, or press
+`mod+alt+c`. Chats live in the **Chats** project and default to Claude. Claude
+answers without tools there: it cannot read files, run commands, or browse, so
+start a thread in a project when you need that. Chats need Claude Code installed
+and signed in, and follow the same availability rule as threads without a
+project.
+
 ### Start in the background
 
 In a desktop browser or the desktop app, press `Cmd+Enter` on macOS or `Ctrl+Enter`

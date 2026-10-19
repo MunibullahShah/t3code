@@ -45,7 +45,8 @@ function ChatRouteGlobalShortcuts() {
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const projects = useProjects();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const { scratchEnvironmentId, startScratchThread } = useScratchProject();
+  const { scratchEnvironmentId, startScratchThread, chatEnvironmentId, startChatThread } =
+    useScratchProject();
   const projectGroupCount = buildSidebarProjectSnapshots({
     projects,
     settings: projectGroupingSettings,
@@ -107,6 +108,17 @@ function ChatRouteGlobalShortcuts() {
           defaultProjectRef,
           handleNewThread,
         });
+        return;
+      }
+
+      if (command === "chat.newClaudeChat") {
+        const environmentId = chatEnvironmentId(
+          activeThread?.environmentId ?? activeDraftThread?.environmentId ?? primaryEnvironmentId,
+        );
+        if (environmentId === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void startChatThread(environmentId);
         return;
       }
 
@@ -196,8 +208,10 @@ function ChatRouteGlobalShortcuts() {
     projectGroupCount,
     routeThreadRef,
     scratchEnvironmentId,
+    chatEnvironmentId,
     selectedThreadKeysSize,
     startScratchThread,
+    startChatThread,
     legacySidebarEnabled,
     terminalOpen,
   ]);

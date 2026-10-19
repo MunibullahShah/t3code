@@ -498,6 +498,18 @@ export const ProjectWriteFileResult = Schema.Struct({
 });
 export type ProjectWriteFileResult = typeof ProjectWriteFileResult.Type;
 
+/**
+ * "chat" asks for the Chats project, whose threads run Claude as a plain
+ * conversational assistant. Older servers ignore the field and open Scratch.
+ */
+export const ManagedProjectKind = Schema.Literals(["scratch", "chat"]);
+export type ManagedProjectKind = typeof ManagedProjectKind.Type;
+
+export const ProjectEnsureScratchInput = Schema.Struct({
+  kind: Schema.optionalKey(ManagedProjectKind),
+});
+export type ProjectEnsureScratchInput = typeof ProjectEnsureScratchInput.Type;
+
 export const ProjectEnsureScratchResult = Schema.Struct({
   projectId: ProjectId,
 });

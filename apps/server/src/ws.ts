@@ -1666,6 +1666,7 @@ const layerWsRpc = (
           const environment = yield* serverEnvironment.getDescriptor;
           const auth = yield* serverAuth.getDescriptor();
           const scratchWorkspaceRoot = yield* managedFolders.scratchRoot;
+          const chatWorkspaceRoot = yield* managedFolders.chatRoot;
           const editorConfig = yield* resolveEditorConfig(
             yield* resolveAvailableEditorsForConfig(externalLauncher.resolveAvailableEditors()),
             resolveFileManagerRevealKindForConfig(externalLauncher.resolveFileManagerRevealKind()),
@@ -1707,6 +1708,10 @@ const layerWsRpc = (
             ...Option.match(scratchWorkspaceRoot, {
               onNone: () => ({}),
               onSome: (root) => ({ scratchWorkspaceRoot: root }),
+            }),
+            ...Option.match(chatWorkspaceRoot, {
+              onNone: () => ({}),
+              onSome: (root) => ({ chatWorkspaceRoot: root }),
             }),
             newProjectsRoot: managedFolders.namedProjectsRoot,
           };
@@ -2548,8 +2553,11 @@ const layerWsRpc = (
                 Effect.ignoreCause({ log: true }),
               ),
           }),
-        [WS_METHODS.projectsEnsureScratch]: () =>
-          managedFolders.ensureScratchProject.pipe(
+        [WS_METHODS.projectsEnsureScratch]: (input) =>
+          (input.kind === "chat"
+            ? managedFolders.ensureChatProject
+            : managedFolders.ensureScratchProject
+          ).pipe(
             Effect.mapError(
               (cause) => new OrchestrationDispatchCommandError({ message: cause.message, cause }),
             ),

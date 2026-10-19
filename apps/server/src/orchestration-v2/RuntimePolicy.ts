@@ -9,8 +9,11 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
+import * as ServerConfig from "../config.ts";
+import { isChatWorkspacePath } from "../project/chatProject.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProjectStore from "./ProjectStore.ts";
@@ -79,6 +82,13 @@ export const layerFromProjectStore: Layer.Layer<
   Effect.gen(function* () {
     const projects = yield* ProjectStore.ProjectStoreV2;
     const providerInstances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
+    // Optional so policy tests and embedders without a data dir keep working.
+    const serverConfig = yield* Effect.serviceOption(ServerConfig.ServerConfig);
+    const path = yield* Effect.serviceOption(Path.Path);
+    const isChatCwd = (cwd: string) =>
+      Option.isSome(serverConfig) &&
+      Option.isSome(path) &&
+      isChatWorkspacePath(path.value, serverConfig.value.baseDir, cwd);
     return RuntimePolicyV2.of({
       resolve: Effect.fn("RuntimePolicyV2.resolve")(function* (input) {
         const instance = yield* providerInstances.getInstance(input.modelSelection.instanceId);
@@ -115,6 +125,7 @@ export const layerFromProjectStore: Layer.Layer<
           runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
           interactionMode: input.thread.interactionMode,
           cwd,
+          ...(isChatCwd(cwd) ? { chatOnly: true } : {}),
         });
       }),
     });

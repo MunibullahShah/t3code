@@ -404,6 +404,14 @@ export type ClaudeAgentSdkQueryTools = ClaudeAgentSdkQueryToolList | ClaudeAgent
 
 export const CLAUDE_READ_ONLY_ALLOWED_TOOLS = ["Read", "Glob", "Grep"] as const;
 
+// Chats replace the Claude Code persona: no tools, no repo, just conversation.
+export const CLAUDE_CHAT_SYSTEM_PROMPT = [
+  "You are Claude, a helpful, thoughtful AI assistant made by Anthropic, chatting with the user in the T3 Code desktop app.",
+  "This is a general conversation, not a coding session: there is no project, repository or file system to work in, and you have no tools.",
+  "Answer directly and conversationally. Use Markdown where it helps readability, including fenced code blocks when the user asks for code.",
+  "If a request would need browsing, files or running commands, say so plainly and suggest the user start a coding thread in a project instead.",
+].join("\n");
+
 function claudeAgentSdkQueryToolsForSdk(
   tools: ClaudeAgentSdkQueryTools,
 ): NonNullable<ClaudeQueryOptions["tools"]> {
@@ -1114,6 +1122,7 @@ export function makeClaudeQueryOptions(input: {
   readonly onUserDialog?: ClaudeQueryOptions["onUserDialog"];
   readonly supportedDialogKinds?: ClaudeQueryOptions["supportedDialogKinds"];
   readonly allowDangerouslySkipPermissions?: boolean;
+  readonly chatOnly?: boolean;
 }): ClaudeAgentSdkQueryOptions {
   const compiledSelection = compileClaudeModelSelection(input.modelSelection);
   const {
@@ -1192,14 +1201,19 @@ export function makeClaudeQueryOptions(input: {
       ? { pathToClaudeCodeExecutable: input.settings.binaryPath }
       : {}),
     ...(input.environment === undefined ? {} : { env: input.environment }),
-    ...(input.mcpServers === undefined ? {} : { mcpServers: input.mcpServers }),
-    systemPrompt: {
-      type: "preset" as const,
-      preset: "claude_code" as const,
-      append:
-        buildRuntimeInstructions({ harness: "Claude Code" }) +
-        (input.mcpServers === undefined ? "" : T3_CODE_ORCHESTRATION_INSTRUCTIONS),
-    },
+    ...(input.mcpServers === undefined || input.chatOnly === true
+      ? {}
+      : { mcpServers: input.mcpServers }),
+    systemPrompt:
+      input.chatOnly === true
+        ? CLAUDE_CHAT_SYSTEM_PROMPT
+        : {
+            type: "preset" as const,
+            preset: "claude_code" as const,
+            append:
+              buildRuntimeInstructions({ harness: "Claude Code" }) +
+              (input.mcpServers === undefined ? "" : T3_CODE_ORCHESTRATION_INSTRUCTIONS),
+          },
     ...(Object.keys(extraArgs).length === 0 ? {} : { extraArgs }),
   };
   const additionalDirectories = [
@@ -1850,11 +1864,21 @@ export interface ClaudeRuntimeQueryPolicy {
   readonly allowedTools?: ReadonlyArray<string>;
   readonly allowDangerouslySkipPermissions?: true;
   readonly installPermissionCallback: boolean;
+  readonly chatOnly?: true;
 }
+
+// Nothing to approve with no tools, so no callback and no bypass.
+const CLAUDE_CHAT_QUERY_POLICY: ClaudeRuntimeQueryPolicy = {
+  permissionMode: "default",
+  tools: [],
+  installPermissionCallback: false,
+  chatOnly: true,
+};
 
 export function claudeRuntimeQueryPolicyForRuntimePolicy(
   runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy,
 ): ClaudeRuntimeQueryPolicy {
+  if (runtimePolicy.chatOnly === true) return CLAUDE_CHAT_QUERY_POLICY;
   const permissionMode = permissionModeForClaudeRuntimePolicy(runtimePolicy);
   const readOnlyTools =
     sandboxPolicyKindForClaudeRuntimePolicy(runtimePolicy) === "readOnly"
@@ -1907,6 +1931,7 @@ function claudeRuntimeQueryPolicyKey(policy: ClaudeRuntimeQueryPolicy): string {
     allowedTools: policy.allowedTools,
     allowDangerouslySkipPermissions: policy.allowDangerouslySkipPermissions,
     installPermissionCallback: policy.installPermissionCallback,
+    chatOnly: policy.chatOnly,
   });
 }
 
@@ -8429,7 +8454,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         ) {
           const queryPolicy = claudeRuntimeQueryPolicyForRuntimePolicy(turnInput.runtimePolicy);
           const mcpOverrides = claudeMcpQueryOverrides({
-            mcpSession: yield* mcpSessions.read(turnInput.threadId),
+            mcpSession:
+              queryPolicy.chatOnly === true
+                ? undefined
+                : yield* mcpSessions.read(turnInput.threadId),
             readOnlySandbox:
               sandboxPolicyKindForClaudeRuntimePolicy(turnInput.runtimePolicy) === "readOnly",
             ...(queryPolicy.allowedTools === undefined
@@ -8542,6 +8570,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             canUseTool,
             onUserDialog,
             supportedDialogKinds: ["resume_return"],
+            ...(queryPolicy.chatOnly === true ? { chatOnly: true } : {}),
           });
           const querySession = yield* queryRunner
             .open({

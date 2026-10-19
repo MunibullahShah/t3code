@@ -220,6 +220,7 @@ import {
 import {
   ProjectCreateNewInput,
   ProjectCreateNewResult,
+  ProjectEnsureScratchInput,
   ProjectEnsureScratchResult,
   ProjectListEntriesError,
   ProjectListEntriesInput,
@@ -1226,7 +1227,7 @@ const WsProjectsMutateRpc = Rpc.make(WS_METHODS.projectsMutate, {
 });
 
 const WsProjectsEnsureScratchRpc = Rpc.make(WS_METHODS.projectsEnsureScratch, {
-  payload: Schema.Struct({}),
+  payload: ProjectEnsureScratchInput,
   success: ProjectEnsureScratchResult,
   error: Schema.Union([OrchestrationDispatchCommandError, EnvironmentAuthorizationError]),
 });

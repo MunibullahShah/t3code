@@ -272,6 +272,51 @@ it.effect("gives each Scratch thread its own folder, named from its message", ()
   ),
 );
 
+it.effect("keeps one Chats project, separate from Scratch, defaulting to Claude", () =>
+  withScratch(({ baseDir }) =>
+    Effect.gen(function* () {
+      const folders = yield* ManagedProjectFolders.ManagedProjectFolders;
+      const projects = yield* ProjectService.ProjectService;
+      const path = yield* Path.Path;
+      const racers = yield* Effect.all(
+        Array.from({ length: 4 }, () => folders.ensureChatProject),
+        { concurrency: "unbounded" },
+      );
+      const scratch = yield* folders.ensureScratchProject;
+      const chatProjectIds = new Set(racers.map((result) => result.projectId));
+      assert.equal(chatProjectIds.size, 1);
+      assert.isFalse(chatProjectIds.has(scratch.projectId));
+
+      const chatRoot = Option.getOrThrow(yield* folders.chatRoot);
+      assert.equal(chatRoot, path.resolve(baseDir, "chats"));
+      const chatProject = (yield* projects.snapshot).projects.find(
+        (project) => project.workspaceRoot === chatRoot,
+      );
+      assert.equal(chatProject?.title, "Chats");
+      assert.equal(chatProject?.defaultModelSelection?.instanceId, "claudeAgent");
+    }),
+  ),
+);
+
+it.effect("gives each chat thread its own folder under the chats root", () =>
+  withScratch(() =>
+    Effect.gen(function* () {
+      const folders = yield* ManagedProjectFolders.ManagedProjectFolders;
+      const path = yield* Path.Path;
+      const { projectId } = yield* folders.ensureChatProject;
+      const folder = Option.getOrThrow(
+        yield* folders.folderForThread({
+          projectId,
+          threadId: ThreadId.make("thread-chat"),
+          text: "Plan a weekend in Lisbon",
+        }),
+      );
+      assert.equal(path.dirname(folder), Option.getOrThrow(yield* folders.chatRoot));
+      assert.match(path.basename(folder), /^\d{4}-\d{2}-\d{2}-plan-a-weekend-in-lisbon-/);
+    }),
+  ),
+);
+
 it.effect("leaves threads in other projects alone", () =>
   withScratch(({ baseDir }) =>
     Effect.gen(function* () {

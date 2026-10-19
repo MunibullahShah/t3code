@@ -44,6 +44,15 @@ export function availableScratchWorkspaceRoot(
     : null;
 }
 
+export function availableChatWorkspaceRoot(
+  connectionPhase: EnvironmentConnectionPhase | null | undefined,
+  serverConfig: Pick<ServerConfig, "chatWorkspaceRoot"> | null | undefined,
+): string | null {
+  return canCreateProjectInEnvironment(connectionPhase)
+    ? (serverConfig?.chatWorkspaceRoot ?? null)
+    : null;
+}
+
 export interface AddProjectRemoteSourceReadinessEntry {
   readonly ready: boolean;
   readonly hint: string | null;

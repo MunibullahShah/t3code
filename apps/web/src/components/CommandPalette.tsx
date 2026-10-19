@@ -66,6 +66,7 @@ import {
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
+  MessageCircleIcon,
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
@@ -719,7 +720,13 @@ function OpenCommandPaletteDialog(props: {
   const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
   });
-  const { scratchEnvironmentId, scratchWorkspaceRootFor, startScratchThread } = useScratchProject();
+  const {
+    scratchEnvironmentId,
+    scratchWorkspaceRootFor,
+    startScratchThread,
+    chatEnvironmentId,
+    startChatThread,
+  } = useScratchProject();
   const lookupRepository = useAtomQueryRunner(sourceControlEnvironment.repository, {
     reportFailure: false,
   });
@@ -986,6 +993,9 @@ function OpenCommandPaletteDialog(props: {
     activeThread?.environmentId ?? activeDraftThread?.environmentId ?? null;
   const currentProjectId = activeThread?.projectId ?? activeDraftThread?.projectId ?? null;
   const scratchTargetEnvironmentId = scratchEnvironmentId(
+    currentProjectEnvironmentId ?? primaryEnvironmentId,
+  );
+  const chatTargetEnvironmentId = chatEnvironmentId(
     currentProjectEnvironmentId ?? primaryEnvironmentId,
   );
   const currentProjectCwd = currentProjectId
@@ -1615,6 +1625,18 @@ function OpenCommandPaletteDialog(props: {
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
       groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
+    });
+  }
+
+  if (chatTargetEnvironmentId !== null) {
+    actionItems.push({
+      kind: "action",
+      value: "action:new-claude-chat",
+      searchTerms: ["new chat", "claude", "chat", "ask", "conversation", "assistant"],
+      title: "New Claude chat",
+      icon: <MessageCircleIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "chat.newClaudeChat",
+      run: () => startChatThread(chatTargetEnvironmentId),
     });
   }
 

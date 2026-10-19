@@ -1,7 +1,11 @@
 import {
   CommandId,
+  DEFAULT_MODEL_BY_PROVIDER,
   type GitManagerServiceError,
+  type ModelSelection,
   ProjectId,
+  ProviderDriverKind,
+  ProviderInstanceId,
   type ThreadId,
   VcsProcessSpawnError,
 } from "@t3tools/contracts";
@@ -24,6 +28,7 @@ import * as ServerConfig from "../config.ts";
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ProjectService from "./ProjectService.ts";
+import { CHAT_PROJECT_TITLE, chatRootFor } from "./chatProject.ts";
 
 export class ScratchUnavailableError extends Schema.TaggedError<ScratchUnavailableError>()(
   "ScratchUnavailableError",
@@ -91,6 +96,9 @@ export class ManagedProjectFolders extends Context.Service<
   {
     readonly scratchRoot: Effect.Effect<Option.Option<string>>;
     readonly ensureScratchProject: Effect.Effect<{ readonly projectId: ProjectId }, ScratchError>;
+    /** Chats share Scratch's availability rule and get one empty folder per thread. */
+    readonly chatRoot: Effect.Effect<Option.Option<string>>;
+    readonly ensureChatProject: Effect.Effect<{ readonly projectId: ProjectId }, ScratchError>;
     readonly folderForThread: (input: {
       readonly projectId: ProjectId;
       readonly threadId: ThreadId;
@@ -141,6 +149,14 @@ const ICON_BACKGROUNDS = [
 ] as const;
 
 const MAX_NAMED_FOLDER_ATTEMPTS = 100;
+
+const CLAUDE_DRIVER = ProviderDriverKind.make("claudeAgent");
+
+// Chats are a Claude feature: only the Claude adapter honors chatOnly.
+const CHAT_DEFAULT_MODEL_SELECTION: ModelSelection = {
+  instanceId: ProviderInstanceId.make(CLAUDE_DRIVER),
+  model: DEFAULT_MODEL_BY_PROVIDER[CLAUDE_DRIVER] ?? "claude-fable-5-1",
+};
 
 function escapeXml(value: string): string {
   return value
@@ -261,9 +277,15 @@ const make = Effect.gen(function* () {
       .makeDirectory(folder, { recursive: true })
       .pipe(Effect.mapError((cause) => new ScratchFolderError({ folder, cause })));
 
-  const ensureScratchProject: ManagedProjectFolders["Service"]["ensureScratchProject"] = Effect.gen(
-    function* () {
-      const workspaceRoot = yield* scratchRoot.pipe(
+  const ensureManagedProject = (spec: {
+    readonly root: Effect.Effect<Option.Option<string>>;
+    readonly kind: string;
+    readonly title: string;
+    readonly iconName: string;
+    readonly defaultModelSelection?: ModelSelection;
+  }) =>
+    Effect.gen(function* () {
+      const workspaceRoot = yield* spec.root.pipe(
         Effect.flatMap(
           Option.match({
             onNone: () => Effect.fail(new ScratchUnavailableError()),
@@ -277,9 +299,9 @@ const make = Effect.gen(function* () {
         .pipe(Effect.mapError((cause) => new ScratchProjectError({ workspaceRoot, cause })));
       const bootstrapped = yield* projects
         .bootstrap({
-          commandId: CommandId.make(`scratch-project:${id}`),
+          commandId: CommandId.make(`${spec.kind}-project:${id}`),
           projectId: ProjectId.make(id),
-          title: "No project",
+          title: spec.title,
           workspaceRoot,
         })
         .pipe(
@@ -298,15 +320,38 @@ const make = Effect.gen(function* () {
         // Set once at create, so a user's own icon choice is never overwritten.
         yield* projects
           .update({
-            commandId: CommandId.make(`scratch-project-icon:${id}`),
+            commandId: CommandId.make(`${spec.kind}-project-icon:${id}`),
             projectId: bootstrapped.project.id,
-            projectIcon: { kind: "lucide", name: "message-square-dashed", color: "gray" },
+            projectIcon: { kind: "lucide", name: spec.iconName, color: "gray" },
+            ...(spec.defaultModelSelection === undefined
+              ? {}
+              : { defaultModelSelection: spec.defaultModelSelection }),
           })
           .pipe(Effect.mapError((cause) => new ScratchProjectError({ workspaceRoot, cause })));
       }
       return { projectId: bootstrapped.project.id };
-    },
+    });
+
+  const ensureScratchProject: ManagedProjectFolders["Service"]["ensureScratchProject"] =
+    ensureManagedProject({
+      root: scratchRoot,
+      kind: "scratch",
+      title: "No project",
+      iconName: "message-square-dashed",
+    });
+
+  const chatRoot = scratchRoot.pipe(
+    Effect.map(Option.map(() => chatRootFor(path, config.baseDir))),
   );
+
+  const ensureChatProject: ManagedProjectFolders["Service"]["ensureChatProject"] =
+    ensureManagedProject({
+      root: chatRoot,
+      kind: "chat",
+      title: CHAT_PROJECT_TITLE,
+      iconName: "message-circle",
+      defaultModelSelection: CHAT_DEFAULT_MODEL_SELECTION,
+    });
 
   const isScratchProject = (projectId: ProjectId, root: string) =>
     projects.getById(projectId).pipe(
@@ -316,12 +361,19 @@ const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => false),
     );
 
+  const managedRootForProject = Effect.fnUntraced(function* (projectId: ProjectId) {
+    for (const candidate of [scratchRoot, chatRoot]) {
+      const root = yield* candidate;
+      if (Option.isSome(root) && (yield* isScratchProject(projectId, root.value))) return root;
+    }
+    return Option.none<string>();
+  });
+
   const folderForThread: ManagedProjectFolders["Service"]["folderForThread"] = Effect.fn(
     "ManagedProjectFolders.folderForThread",
   )(function* (input) {
-    const root = yield* scratchRoot;
+    const root = yield* managedRootForProject(input.projectId);
     if (Option.isNone(root)) return Option.none();
-    if (!(yield* isScratchProject(input.projectId, root.value))) return Option.none();
     const date = DateTime.formatIso(yield* DateTime.now).slice(0, 10);
     const words = folderWords(input.text);
     const id = input.threadId.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -467,6 +519,8 @@ const make = Effect.gen(function* () {
   return ManagedProjectFolders.of({
     scratchRoot,
     ensureScratchProject,
+    chatRoot,
+    ensureChatProject,
     folderForThread,
     namedProjectsRoot,
     createNamedProject,

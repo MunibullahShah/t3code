@@ -1,8 +1,14 @@
-import { ArrowLeftIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ChartNoAxesColumnIcon,
+  MessageCircleIcon,
+  SettingsIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
+import { useScratchProject } from "../../hooks/useScratchProject";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
@@ -164,6 +170,13 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     select: (location) => isSidebarUtilityPage(location.pathname),
   });
   const pullRequestsSupported = usePullRequestsSupported();
+  const { chatEnvironmentId, startChatThread } = useScratchProject();
+  const chatTargetEnvironmentId = chatEnvironmentId(null);
+  const handleNewChatClick = () => {
+    if (chatTargetEnvironmentId === null) return;
+    closeMobileSidebar();
+    void startChatThread(chatTargetEnvironmentId);
+  };
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -204,6 +217,13 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
         </SidebarMenuItem>
       ) : (
         <>
+          {chatTargetEnvironmentId !== null ? (
+            <SidebarUtilityItem
+              icon={<MessageCircleIcon />}
+              label="New Claude chat"
+              onClick={handleNewChatClick}
+            />
+          ) : null}
           <SidebarUtilityItem
             icon={<SettingsIcon />}
             label="Settings"
