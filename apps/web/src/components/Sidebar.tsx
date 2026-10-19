@@ -2874,11 +2874,33 @@ export default function Sidebar() {
     }
     return environmentLabelById.get(thread.environmentId) ?? null;
   };
+  const chatProjectKeys = chatMode
+    ? chatProjectScopeKeys(
+        projects,
+        (environmentId) =>
+          serverConfigs.get(environmentId as EnvironmentId)?.chatWorkspaceRoot ?? null,
+      )
+    : null;
+  const isChatGroup = (group: (typeof projectGroups)[number]) =>
+    chatProjectKeys !== null &&
+    group.memberProjectRefs.every((ref) =>
+      chatProjectKeys.has(`${ref.environmentId}:${ref.projectId}`),
+    );
+  // Chat mode picks between all chats and each Claude Project, never code projects.
+  const visibleProjectScopeItems = chatMode
+    ? [
+        { value: "all", label: "All chats" },
+        ...projectGroups
+          .filter(isChatGroup)
+          .map((group) => ({ value: group.projectKey, label: group.displayName })),
+      ]
+    : projectScopeItems;
+  const chatGroupCount = visibleProjectScopeItems.length - 1;
   const selectedProjectScopeItem =
-    projectScopeItems.find((item) => item.value === (projectScopeKey ?? "all")) ??
-    projectScopeItems[0]!;
+    visibleProjectScopeItems.find((item) => item.value === (projectScopeKey ?? "all")) ??
+    visibleProjectScopeItems[0]!;
   const filteredProjectScopeItems = filterSidebarProjectScopeItems({
-    items: projectScopeItems,
+    items: visibleProjectScopeItems,
     query: projectScopeMenuState.query,
     matches: (item, query) =>
       projectScopeFilter.contains(item, query, (candidate) => candidate.label),
@@ -2895,13 +2917,16 @@ export default function Sidebar() {
             (projectRef) => `${projectRef.environmentId}:${projectRef.projectId}`,
           ),
         );
-  // Chat mode lists only Claude chats, whatever project the picker last held.
+  // Chat mode lists only chats: the picked Claude Project, or all of them
+  // when the picker still holds a code project from Code mode.
+  const pickedChatGroup =
+    chatMode && scopedProjectGroup !== null && isChatGroup(scopedProjectGroup)
+      ? scopedProjectGroup
+      : null;
   const scopedProjectKeys = chatMode
-    ? chatProjectScopeKeys(
-        projects,
-        (environmentId) =>
-          serverConfigs.get(environmentId as EnvironmentId)?.chatWorkspaceRoot ?? null,
-      )
+    ? pickedChatGroup !== null
+      ? pickedProjectKeys
+      : chatProjectKeys
     : pickedProjectKeys;
   useEffect(() => {
     const nextKey = resolveSidebarProjectScopeKey({
@@ -4523,6 +4548,12 @@ export default function Sidebar() {
   const chatTargetEnvironmentId = chatMode ? chatEnvironmentId(null) : null;
   const handleNewThreadClick = (event?: ReactMouseEvent) => {
     if (chatMode) {
+      const pickedProjectRef = pickedChatGroup?.memberProjectRefs[0];
+      if (pickedProjectRef !== undefined) {
+        if (isMobile) setOpenMobile(false);
+        void newThreadContext.handleNewThread(pickedProjectRef);
+        return;
+      }
       if (chatTargetEnvironmentId === null) return;
       if (isMobile) setOpenMobile(false);
       void startChatThread(chatTargetEnvironmentId);
@@ -4556,11 +4587,12 @@ export default function Sidebar() {
           <SidebarGroup className="z-[1]">
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}
-              hasProjects={!chatMode && projectGroups.length > 0}
+              hasProjects={chatMode ? chatGroupCount > 1 : projectGroups.length > 0}
+              canAddProject={!chatMode}
               newThreadText={chatMode ? "New chat" : "New thread"}
               projectScope={
                 <Combobox
-                  items={projectScopeItems}
+                  items={visibleProjectScopeItems}
                   filteredItems={filteredProjectScopeItems}
                   autoHighlight
                   itemToStringLabel={(item) => item.label}
@@ -4635,7 +4667,7 @@ export default function Sidebar() {
                     />
                     <ComboboxEmpty>No matching projects.</ComboboxEmpty>
                     <ComboboxList>
-                      {(item: (typeof projectScopeItems)[number]) => {
+                      {(item: (typeof visibleProjectScopeItems)[number]) => {
                         const project = projectGroupByScopeKey.get(item.value) ?? null;
                         return (
                           <ComboboxItem

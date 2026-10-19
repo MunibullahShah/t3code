@@ -14,6 +14,10 @@ export const ClaudeExportImportResult = Schema.Struct({
   importedCount: NonNegativeInt,
   alreadyImportedCount: NonNegativeInt,
   skippedCount: NonNegativeInt,
+  /** Whether Claude's memory about the user was found and saved for chats. */
+  memoryImported: Schema.optionalKey(Schema.Boolean),
+  /** Claude Projects made into chat projects (new or refreshed). */
+  projectCount: Schema.optionalKey(NonNegativeInt),
 });
 export type ClaudeExportImportResult = typeof ClaudeExportImportResult.Type;
 

@@ -54,6 +54,8 @@ export const ProviderAdapterV2RuntimePolicy = Schema.Struct({
   reasoningEffort: Schema.optional(Schema.String),
   /** The thread lives in the Chats project: converse, don't touch the machine. */
   chatOnly: Schema.optional(Schema.Boolean),
+  /** The chats folder, where account-wide chat context such as memory lives. */
+  chatRoot: Schema.optional(Schema.String),
 });
 export type ProviderAdapterV2RuntimePolicy = typeof ProviderAdapterV2RuntimePolicy.Type;
 

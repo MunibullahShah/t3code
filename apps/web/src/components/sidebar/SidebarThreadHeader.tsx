@@ -19,6 +19,7 @@ export interface SidebarThreadHeaderProps {
   onNewProject: () => void;
   onNewThread: (event: ReactMouseEvent) => void;
   newThreadText?: string;
+  canAddProject?: boolean;
   newThreadDisabled: boolean;
   newThreadShortcutLabel: string | null | undefined;
   newThreadInProjectShortcutLabel: string | null | undefined;
@@ -40,6 +41,7 @@ export function SidebarThreadHeader({
   onNewProject,
   onNewThread,
   newThreadText = "New thread",
+  canAddProject = true,
   newThreadDisabled,
   newThreadShortcutLabel,
   newThreadInProjectShortcutLabel,
@@ -109,9 +111,11 @@ export function SidebarThreadHeader({
         {hasProjects ? (
           <>
             {projectScope}
-            <SidebarHeaderIconButton label="Add project" onClick={onNewProject}>
-              <FolderPlusIcon />
-            </SidebarHeaderIconButton>
+            {canAddProject ? (
+              <SidebarHeaderIconButton label="Add project" onClick={onNewProject}>
+                <FolderPlusIcon />
+              </SidebarHeaderIconButton>
+            ) : null}
           </>
         ) : null}
         <SidebarHeaderIconButton

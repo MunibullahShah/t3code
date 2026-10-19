@@ -58,7 +58,13 @@ Claude conversations…** in the command palette, **Settings → General → Cha
 Import from Claude**, or **Import chats…** on the welcome screen, and pick the
 folder holding the zip (or the folder you unzipped it into). Each conversation
 becomes a chat you can continue: Claude gets the earlier conversation back as
-context. Importing the same export again skips chats already imported.
+context. Importing the same export again skips chats already imported. You can
+also type or paste the export's path in that settings row.
+
+The import also brings in what Claude remembers about you, which every chat
+then starts with, and your Claude Projects. Each project appears in the Chat
+mode sidebar filter; chats started in a project follow its instructions and use
+its knowledge files. Anthropic's sample starter projects are left out.
 
 ### Start in the background
 

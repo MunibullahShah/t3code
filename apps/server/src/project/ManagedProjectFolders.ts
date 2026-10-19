@@ -28,7 +28,7 @@ import * as ServerConfig from "../config.ts";
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ProjectService from "./ProjectService.ts";
-import { CHAT_PROJECT_TITLE, chatRootFor } from "./chatProject.ts";
+import { CHAT_PROJECT_TITLE, CHAT_PROJECTS_FOLDER, chatRootFor } from "./chatProject.ts";
 
 export class ScratchUnavailableError extends Schema.TaggedError<ScratchUnavailableError>()(
   "ScratchUnavailableError",
@@ -99,6 +99,17 @@ export class ManagedProjectFolders extends Context.Service<
     /** Chats share Scratch's availability rule and get one empty folder per thread. */
     readonly chatRoot: Effect.Effect<Option.Option<string>>;
     readonly ensureChatProject: Effect.Effect<{ readonly projectId: ProjectId }, ScratchError>;
+    /**
+     * A chat-only project for an imported Claude Project, under the chats
+     * root so its threads run like chats. Keyed so a re-import reuses it.
+     */
+    readonly ensureChatSubProject: (input: {
+      readonly key: string;
+      readonly title: string;
+    }) => Effect.Effect<
+      { readonly projectId: ProjectId; readonly workspaceRoot: string },
+      ScratchError
+    >;
     readonly folderForThread: (input: {
       readonly projectId: ProjectId;
       readonly threadId: ThreadId;
@@ -516,11 +527,35 @@ const make = Effect.gen(function* () {
     };
   });
 
+  const ensureChatSubProject: ManagedProjectFolders["Service"]["ensureChatSubProject"] = (
+    input,
+  ) => {
+    const folderName = [folderWords(input.title), input.key.replace(/[^a-z0-9]/gi, "").slice(0, 8)]
+      .filter(Boolean)
+      .join("-")
+      .toLowerCase();
+    return Effect.gen(function* () {
+      const chats = yield* chatRoot;
+      if (Option.isNone(chats)) return yield* new ScratchUnavailableError();
+      const workspaceRoot = path.join(chats.value, CHAT_PROJECTS_FOLDER, folderName);
+      yield* makeScratchFolder(path.join(chats.value, CHAT_PROJECTS_FOLDER));
+      const { projectId } = yield* ensureManagedProject({
+        root: Effect.succeed(Option.some(workspaceRoot)),
+        kind: `chat-project-${folderName}`,
+        title: input.title,
+        iconName: "folder-open",
+        defaultModelSelection: CHAT_DEFAULT_MODEL_SELECTION,
+      });
+      return { projectId, workspaceRoot };
+    });
+  };
+
   return ManagedProjectFolders.of({
     scratchRoot,
     ensureScratchProject,
     chatRoot,
     ensureChatProject,
+    ensureChatSubProject,
     folderForThread,
     namedProjectsRoot,
     createNamedProject,

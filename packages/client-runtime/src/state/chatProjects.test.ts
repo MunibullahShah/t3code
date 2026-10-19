@@ -8,6 +8,12 @@ describe("chatProjectScopeKeys", () => {
     { environmentId: "local", id: "app", workspaceRoot: "/Users/me/code/app" },
     { environmentId: "remote", id: "chats-r", workspaceRoot: "/home/me/.t3/chats/" },
     { environmentId: "old", id: "chats-o", workspaceRoot: "/srv/.t3/chats" },
+    {
+      environmentId: "local",
+      id: "claude-project",
+      workspaceRoot: "/Users/me/.t3/chats/projects/marketing-019d0341",
+    },
+    { environmentId: "local", id: "lookalike", workspaceRoot: "/Users/me/.t3/chats-old" },
   ];
   const roots: Record<string, string | undefined> = {
     local: "/Users/me/.t3/chats",
@@ -16,7 +22,7 @@ describe("chatProjectScopeKeys", () => {
 
   it("keys each environment's Chats project and nothing else", () => {
     expect(chatProjectScopeKeys(projects, (environmentId) => roots[environmentId])).toEqual(
-      new Set(["local:chats", "remote:chats-r"]),
+      new Set(["local:chats", "remote:chats-r", "local:claude-project"]),
     );
   });
 

@@ -24,7 +24,16 @@ import * as Schema from "effect/Schema";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { messageEvents } from "../project/AgentSessionImporter.ts";
-import { CHAT_HISTORY_FILE } from "../project/chatProject.ts";
+import {
+  CHAT_HISTORY_FILE,
+  CHAT_MEMORY_FILE,
+  CHAT_PROJECT_CONTEXT_FILE,
+} from "../project/chatProject.ts";
+import {
+  parseClaudeProject,
+  renderClaudeMemory,
+  renderProjectContext,
+} from "./claudeExportExtras.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import {
   ClaudeExportFormatError,
@@ -142,14 +151,66 @@ const make = Effect.gen(function* () {
     return "imported" as const;
   });
 
+  const parseJsonTexts = (texts: ReadonlyArray<string>) =>
+    Effect.forEach(texts, (text) => decodeJson(text).pipe(Effect.option)).pipe(
+      Effect.map((decoded) => decoded.flatMap(Option.toArray)),
+    );
+
+  // Re-importing replaces the saved memory: the newest export is the truth.
+  const importMemory = Effect.fn("ClaudeExportImporter.importMemory")(function* (
+    texts: ReadonlyArray<string>,
+  ) {
+    const memory = renderClaudeMemory(yield* parseJsonTexts(texts));
+    const chats = yield* folders.chatRoot;
+    if (Option.isNone(memory) || Option.isNone(chats)) return false;
+    return yield* fileSystem
+      .writeFileString(path.join(chats.value, CHAT_MEMORY_FILE), memory.value)
+      .pipe(
+        Effect.as(true),
+        Effect.catch((cause) =>
+          Effect.logWarning("Could not save Claude memory", { cause }).pipe(Effect.as(false)),
+        ),
+      );
+  });
+
+  const importProjects = Effect.fn("ClaudeExportImporter.importProjects")(function* (
+    texts: ReadonlyArray<string>,
+  ) {
+    const projects = (yield* parseJsonTexts(texts)).flatMap((json) =>
+      Option.toArray(parseClaudeProject(json)),
+    );
+    let count = 0;
+    for (const project of projects) {
+      const saved = yield* folders
+        .ensureChatSubProject({ key: project.uuid, title: project.name })
+        .pipe(
+          Effect.flatMap(({ workspaceRoot }) =>
+            fileSystem.writeFileString(
+              path.join(workspaceRoot, CHAT_PROJECT_CONTEXT_FILE),
+              renderProjectContext(project),
+            ),
+          ),
+          Effect.as(true),
+          Effect.catch((cause) =>
+            Effect.logWarning("Could not import a Claude Project", {
+              project: project.uuid,
+              cause,
+            }).pipe(Effect.as(false)),
+          ),
+        );
+      if (saved) count += 1;
+    }
+    return count;
+  });
+
   const importExport = Effect.fn("ClaudeExportImporter.importExport")(function* (
     input: ClaudeExportImportInput,
   ) {
-    const text = yield* readClaudeExport(input.path).pipe(
+    const files = yield* readClaudeExport(input.path).pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
     );
-    const json = yield* decodeJson(text).pipe(
+    const json = yield* decodeJson(files.conversations).pipe(
       Effect.mapError(() =>
         invalid("conversations.json is not valid JSON. Download the export again."),
       ),
@@ -184,7 +245,15 @@ const make = Effect.gen(function* () {
       else if (outcome === "already-imported") alreadyImportedCount += 1;
       else skippedCount += 1;
     }
-    return { importedCount, alreadyImportedCount, skippedCount } satisfies ClaudeExportImportResult;
+    const memoryImported = yield* importMemory(files.memories);
+    const projectCount = yield* importProjects(files.projects);
+    return {
+      importedCount,
+      alreadyImportedCount,
+      skippedCount,
+      memoryImported,
+      projectCount,
+    } satisfies ClaudeExportImportResult;
   });
 
   return { importExport } satisfies ClaudeExportImporterShape;

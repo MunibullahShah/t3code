@@ -266,15 +266,22 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
       cwd: "/home/user/.t3/chats/2026-10-20-trip",
       tools: [],
       chatOnly: true,
-      chatHistory: "# Trip\n\n### User\n\nPlan Lisbon",
+      chatContext: {
+        memory: "Lives in Karachi.",
+        project: "## Project instructions\n\nBe concise.",
+        history: "# Trip\n\n### User\n\nPlan Lisbon",
+      },
     });
     assert.isString(options.systemPrompt);
     const prompt = options.systemPrompt as string;
     assert.isTrue(prompt.startsWith(ClaudeAdapterV2.CLAUDE_CHAT_SYSTEM_PROMPT));
     assert.include(prompt, "<earlier_conversation>\n# Trip");
     assert.include(prompt, "Plan Lisbon");
+    assert.include(prompt, "<user_memory>\nLives in Karachi.\n</user_memory>");
+    assert.include(prompt, "<project>\n## Project instructions\n\nBe concise.\n</project>");
+    assert.isBelow(prompt.indexOf("<user_memory>"), prompt.indexOf("<earlier_conversation>"));
     assert.equal(
-      ClaudeAdapterV2.claudeChatSystemPrompt("  "),
+      ClaudeAdapterV2.claudeChatSystemPrompt({ memory: "  " }),
       ClaudeAdapterV2.CLAUDE_CHAT_SYSTEM_PROMPT,
     );
   });

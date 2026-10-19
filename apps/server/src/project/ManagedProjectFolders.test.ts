@@ -317,6 +317,22 @@ it.effect("gives each chat thread its own folder under the chats root", () =>
   ),
 );
 
+it.effect("keeps one chat project per Claude Project, inside the chats root", () =>
+  withScratch(() =>
+    Effect.gen(function* () {
+      const folders = yield* ManagedProjectFolders.ManagedProjectFolders;
+      const path = yield* Path.Path;
+      const input = { key: "019d0341-04b0-7359", title: "Marketing Launch" };
+      const first = yield* folders.ensureChatSubProject(input);
+      const again = yield* folders.ensureChatSubProject(input);
+      assert.equal(again.projectId, first.projectId);
+      const chatRoot = Option.getOrThrow(yield* folders.chatRoot);
+      assert.equal(path.dirname(first.workspaceRoot), path.join(chatRoot, "projects"));
+      assert.match(path.basename(first.workspaceRoot), /^marketing-launch-019d0341$/);
+    }),
+  ),
+);
+
 it.effect("leaves threads in other projects alone", () =>
   withScratch(({ baseDir }) =>
     Effect.gen(function* () {

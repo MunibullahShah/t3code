@@ -37,11 +37,25 @@ const exportJson = JSON.stringify([
 const harness = (root: string) => {
   const writes: Array<ReadonlyArray<OrchestrationV2DomainEvent>> = [];
   const existing = new Set<ThreadId>();
+  const subProjects: Array<string> = [];
   const layer = ClaudeExportImporter.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
         Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
+          namedProjectsRoot: root,
+          chatRoot: Effect.succeed(Option.some(root)),
           ensureChatProject: Effect.succeed({ projectId }),
+          ensureChatSubProject: ({ key, title }) =>
+            Effect.gen(function* () {
+              const fileSystem = yield* FileSystem.FileSystem;
+              const path = yield* Path.Path;
+              const workspaceRoot = path.join(root, "projects", key);
+              yield* fileSystem
+                .makeDirectory(workspaceRoot, { recursive: true })
+                .pipe(Effect.orDie);
+              subProjects.push(title);
+              return { projectId: ProjectId.make(`sub-${key}`), workspaceRoot };
+            }).pipe(Effect.provide(NodeServices.layer)),
           folderForThread: ({ threadId }) =>
             Effect.gen(function* () {
               const fileSystem = yield* FileSystem.FileSystem;
@@ -68,7 +82,7 @@ const harness = (root: string) => {
       ),
     ),
   );
-  return { layer, writes };
+  return { layer, writes, subProjects };
 };
 
 it.effect("imports a claude.ai export into Chats once, with a history file per chat", () =>
@@ -78,16 +92,37 @@ it.effect("imports a claude.ai export into Chats once, with a history file per c
     const exportDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "claude-export-" });
     const chatsRoot = yield* fileSystem.makeTempDirectoryScoped({ prefix: "chats-" });
     yield* fileSystem.writeFileString(path.join(exportDir, "conversations.json"), exportJson);
-    const { layer, writes } = harness(chatsRoot);
+    yield* fileSystem.makeDirectory(path.join(exportDir, "memories"));
+    yield* fileSystem.writeFileString(
+      path.join(exportDir, "memories", "m.json"),
+      JSON.stringify({ conversations_memory: "Likes Lisbon.", memory_files: [] }),
+    );
+    yield* fileSystem.makeDirectory(path.join(exportDir, "projects"));
+    yield* fileSystem.writeFileString(
+      path.join(exportDir, "projects", "p.json"),
+      JSON.stringify({
+        uuid: "019d0341-04b0-7359-a7e3-4d83cbb5f10d",
+        name: "Travel",
+        prompt_template: "Be concise.",
+        docs: [],
+      }),
+    );
+    const { layer, writes, subProjects } = harness(chatsRoot);
 
     yield* Effect.gen(function* () {
       const importer = yield* ClaudeExportImporter.ClaudeExportImporter;
       const first = yield* importer.importExport({ path: exportDir });
-      assert.deepEqual(first, { importedCount: 1, alreadyImportedCount: 0, skippedCount: 1 });
+      assert.deepEqual(first, {
+        importedCount: 1,
+        alreadyImportedCount: 0,
+        skippedCount: 1,
+        memoryImported: true,
+        projectCount: 1,
+      });
       const again = yield* importer.importExport({
         path: path.join(exportDir, "conversations.json"),
       });
-      assert.deepEqual(again, { importedCount: 0, alreadyImportedCount: 1, skippedCount: 1 });
+      assert.include(again, { importedCount: 0, alreadyImportedCount: 1, skippedCount: 1 });
     }).pipe(Effect.provide(layer));
 
     assert.lengthOf(writes, 1);
@@ -105,9 +140,23 @@ it.effect("imports a claude.ai export into Chats once, with a history file per c
       .map((event) => (event.payload as { text: string }).text);
     assert.deepEqual(texts, ["Plan a weekend in Lisbon", "Day 1: Alfama."]);
 
-    const worktreePath = (created?.payload as { worktreePath: string }).worktreePath;
+    assert.isDefined(created);
+    const worktreePath = (created!.payload as { worktreePath: string }).worktreePath;
     const history = yield* fileSystem.readFileString(path.join(worktreePath, CHAT_HISTORY_FILE));
     assert.include(history, "### Claude\n\nDay 1: Alfama.");
+
+    const memory = yield* fileSystem.readFileString(path.join(chatsRoot, ".claude-memory.md"));
+    assert.include(memory, "Likes Lisbon.");
+    assert.deepEqual(subProjects, ["Travel", "Travel"]);
+    const projectContext = yield* fileSystem.readFileString(
+      path.join(
+        chatsRoot,
+        "projects",
+        "019d0341-04b0-7359-a7e3-4d83cbb5f10d",
+        ".claude-project.md",
+      ),
+    );
+    assert.include(projectContext, "## Project instructions\n\nBe concise.");
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 

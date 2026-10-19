@@ -144,7 +144,20 @@ export function isScratchProject(
   );
 }
 
-/** Sidebar scope keys (`environmentId:projectId`) of each environment's Chats project. */
+/** Chats and imported Claude Projects all live under the chats root. */
+export function isChatProject(
+  project: { readonly workspaceRoot: string },
+  chatWorkspaceRoot: string | null | undefined,
+): boolean {
+  if (chatWorkspaceRoot == null) return false;
+  const root = normalizeProjectPathForComparison(chatWorkspaceRoot).replace(/[\\/]+$/, "");
+  const candidate = normalizeProjectPathForComparison(project.workspaceRoot).replace(/[\\/]+$/, "");
+  return (
+    candidate === root || candidate.startsWith(`${root}/`) || candidate.startsWith(`${root}\\`)
+  );
+}
+
+/** Sidebar scope keys (`environmentId:projectId`) of every chat project. */
 export function chatProjectScopeKeys(
   projects: ReadonlyArray<{
     readonly environmentId: string;
@@ -155,7 +168,7 @@ export function chatProjectScopeKeys(
 ): ReadonlySet<string> {
   return new Set(
     projects
-      .filter((project) => isScratchProject(project, chatWorkspaceRootFor(project.environmentId)))
+      .filter((project) => isChatProject(project, chatWorkspaceRootFor(project.environmentId)))
       .map((project) => `${project.environmentId}:${project.id}`),
   );
 }

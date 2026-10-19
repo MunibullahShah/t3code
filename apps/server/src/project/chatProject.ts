@@ -8,6 +8,15 @@ export const CHAT_PROJECT_TITLE = "Chats";
 /** Written into an imported chat's folder; Claude reads it back on resume. */
 export const CHAT_HISTORY_FILE = ".claude-chat-history.md";
 
+/** At the chats root: what Claude remembers about the user, for every chat. */
+export const CHAT_MEMORY_FILE = ".claude-memory.md";
+
+/** At a Claude Project's root: its custom instructions and knowledge docs. */
+export const CHAT_PROJECT_CONTEXT_FILE = ".claude-project.md";
+
+/** Claude Projects imported from an export live in folders under here. */
+export const CHAT_PROJECTS_FOLDER = "projects";
+
 type PathOps = Pick<Path.Path, "resolve" | "sep">;
 
 export function chatRootFor(path: PathOps, baseDir: string): string {

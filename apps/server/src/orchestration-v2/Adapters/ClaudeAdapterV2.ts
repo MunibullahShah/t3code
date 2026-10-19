@@ -1,5 +1,9 @@
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
-import { CHAT_HISTORY_FILE } from "../../project/chatProject.ts";
+import {
+  CHAT_HISTORY_FILE,
+  CHAT_MEMORY_FILE,
+  CHAT_PROJECT_CONTEXT_FILE,
+} from "../../project/chatProject.ts";
 import { truncateChatHistory } from "../../chats/claudeExportParser.ts";
 import { claudeTaskOutputRoot, tailClaudeTaskOutput } from "./ClaudeTaskOutputTail.ts";
 import {
@@ -414,16 +418,40 @@ export const CLAUDE_CHAT_SYSTEM_PROMPT = [
   "If a request would need browsing, files or running commands, say so plainly and suggest the user start a coding thread in a project instead.",
 ].join("\n");
 
-export function claudeChatSystemPrompt(history: string | undefined): string {
-  if (history === undefined || history.trim().length === 0) return CLAUDE_CHAT_SYSTEM_PROMPT;
-  return [
-    CLAUDE_CHAT_SYSTEM_PROMPT,
-    "",
-    "This chat was imported from claude.ai. Its earlier conversation is below; continue it naturally, as the same Claude, without restating it.",
-    "<earlier_conversation>",
-    truncateChatHistory(history),
-    "</earlier_conversation>",
-  ].join("\n");
+export interface ClaudeChatContext {
+  readonly memory?: string | undefined;
+  readonly project?: string | undefined;
+  readonly history?: string | undefined;
+}
+
+// Generous but bounded, so one huge export cannot crowd out the conversation.
+const CHAT_MEMORY_CONTEXT_CHARS = 40_000;
+const CHAT_PROJECT_CONTEXT_CHARS = 100_000;
+
+const present = (text: string | undefined): text is string =>
+  text !== undefined && text.trim().length > 0;
+
+export function claudeChatSystemPrompt(context: ClaudeChatContext): string {
+  const sections = [CLAUDE_CHAT_SYSTEM_PROMPT];
+  if (present(context.memory)) {
+    sections.push(
+      "What you remember about the user from past conversations on claude.ai. Use it naturally where it helps; don't recite it.",
+      `<user_memory>\n${truncateChatHistory(context.memory, CHAT_MEMORY_CONTEXT_CHARS)}\n</user_memory>`,
+    );
+  }
+  if (present(context.project)) {
+    sections.push(
+      "This chat belongs to one of the user's Claude Projects. Follow its instructions and draw on its knowledge.",
+      `<project>\n${truncateChatHistory(context.project, CHAT_PROJECT_CONTEXT_CHARS)}\n</project>`,
+    );
+  }
+  if (present(context.history)) {
+    sections.push(
+      "This chat was imported from claude.ai. Its earlier conversation is below; continue it naturally, as the same Claude, without restating it.",
+      `<earlier_conversation>\n${truncateChatHistory(context.history)}\n</earlier_conversation>`,
+    );
+  }
+  return sections.join("\n\n");
 }
 
 function claudeAgentSdkQueryToolsForSdk(
@@ -1137,8 +1165,8 @@ export function makeClaudeQueryOptions(input: {
   readonly supportedDialogKinds?: ClaudeQueryOptions["supportedDialogKinds"];
   readonly allowDangerouslySkipPermissions?: boolean;
   readonly chatOnly?: boolean;
-  /** An imported chat's earlier conversation, given back to Claude as context. */
-  readonly chatHistory?: string;
+  /** Memory, Claude Project context and an imported chat's earlier conversation. */
+  readonly chatContext?: ClaudeChatContext;
 }): ClaudeAgentSdkQueryOptions {
   const compiledSelection = compileClaudeModelSelection(input.modelSelection);
   const {
@@ -1222,7 +1250,7 @@ export function makeClaudeQueryOptions(input: {
       : { mcpServers: input.mcpServers }),
     systemPrompt:
       input.chatOnly === true
-        ? claudeChatSystemPrompt(input.chatHistory)
+        ? claudeChatSystemPrompt(input.chatContext ?? {})
         : {
             type: "preset" as const,
             preset: "claude_code" as const,
@@ -8561,11 +8589,22 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             turnInput.nativeThreadHasTurns ?? turnInput.providerTurnOrdinal > 1;
           const shouldResume =
             resumeSessionAt !== undefined || openedWithResume || hasPersistedProviderTurn;
-          const chatHistory =
-            queryPolicy.chatOnly === true && turnInput.runtimePolicy.cwd !== null
-              ? yield* fileSystem
-                  .readFileString(path.join(turnInput.runtimePolicy.cwd, CHAT_HISTORY_FILE))
-                  .pipe(Effect.option, Effect.map(Option.getOrUndefined))
+          const readOptional = (dir: string | null | undefined, file: string) =>
+            dir == null
+              ? Effect.succeed(undefined)
+              : fileSystem
+                  .readFileString(path.join(dir, file))
+                  .pipe(Effect.option, Effect.map(Option.getOrUndefined));
+          const chatContext: ClaudeChatContext | undefined =
+            queryPolicy.chatOnly === true
+              ? {
+                  memory: yield* readOptional(turnInput.runtimePolicy.chatRoot, CHAT_MEMORY_FILE),
+                  project: yield* readOptional(
+                    turnInput.runtimePolicy.cwd,
+                    CHAT_PROJECT_CONTEXT_FILE,
+                  ),
+                  history: yield* readOptional(turnInput.runtimePolicy.cwd, CHAT_HISTORY_FILE),
+                }
               : undefined;
           const queryOptions = makeClaudeQueryOptions({
             modelSelection: turnInput.modelSelection,
@@ -8593,7 +8632,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             onUserDialog,
             supportedDialogKinds: ["resume_return"],
             ...(queryPolicy.chatOnly === true ? { chatOnly: true } : {}),
-            ...(chatHistory === undefined ? {} : { chatHistory }),
+            ...(chatContext === undefined ? {} : { chatContext }),
           });
           const querySession = yield* queryRunner
             .open({
