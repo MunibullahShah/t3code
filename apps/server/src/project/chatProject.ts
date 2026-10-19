@@ -5,6 +5,9 @@ export const CHAT_FOLDER_NAME = "chats";
 
 export const CHAT_PROJECT_TITLE = "Chats";
 
+/** Written into an imported chat's folder; Claude reads it back on resume. */
+export const CHAT_HISTORY_FILE = ".claude-chat-history.md";
+
 type PathOps = Pick<Path.Path, "resolve" | "sep">;
 
 export function chatRootFor(path: PathOps, baseDir: string): string {

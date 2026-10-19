@@ -1,4 +1,6 @@
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
+import { CHAT_HISTORY_FILE } from "../../project/chatProject.ts";
+import { truncateChatHistory } from "../../chats/claudeExportParser.ts";
 import { claudeTaskOutputRoot, tailClaudeTaskOutput } from "./ClaudeTaskOutputTail.ts";
 import {
   dynamicToolTitle,
@@ -411,6 +413,18 @@ export const CLAUDE_CHAT_SYSTEM_PROMPT = [
   "Answer directly and conversationally. Use Markdown where it helps readability, including fenced code blocks when the user asks for code.",
   "If a request would need browsing, files or running commands, say so plainly and suggest the user start a coding thread in a project instead.",
 ].join("\n");
+
+export function claudeChatSystemPrompt(history: string | undefined): string {
+  if (history === undefined || history.trim().length === 0) return CLAUDE_CHAT_SYSTEM_PROMPT;
+  return [
+    CLAUDE_CHAT_SYSTEM_PROMPT,
+    "",
+    "This chat was imported from claude.ai. Its earlier conversation is below; continue it naturally, as the same Claude, without restating it.",
+    "<earlier_conversation>",
+    truncateChatHistory(history),
+    "</earlier_conversation>",
+  ].join("\n");
+}
 
 function claudeAgentSdkQueryToolsForSdk(
   tools: ClaudeAgentSdkQueryTools,
@@ -1123,6 +1137,8 @@ export function makeClaudeQueryOptions(input: {
   readonly supportedDialogKinds?: ClaudeQueryOptions["supportedDialogKinds"];
   readonly allowDangerouslySkipPermissions?: boolean;
   readonly chatOnly?: boolean;
+  /** An imported chat's earlier conversation, given back to Claude as context. */
+  readonly chatHistory?: string;
 }): ClaudeAgentSdkQueryOptions {
   const compiledSelection = compileClaudeModelSelection(input.modelSelection);
   const {
@@ -1206,7 +1222,7 @@ export function makeClaudeQueryOptions(input: {
       : { mcpServers: input.mcpServers }),
     systemPrompt:
       input.chatOnly === true
-        ? CLAUDE_CHAT_SYSTEM_PROMPT
+        ? claudeChatSystemPrompt(input.chatHistory)
         : {
             type: "preset" as const,
             preset: "claude_code" as const,
@@ -8545,6 +8561,12 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             turnInput.nativeThreadHasTurns ?? turnInput.providerTurnOrdinal > 1;
           const shouldResume =
             resumeSessionAt !== undefined || openedWithResume || hasPersistedProviderTurn;
+          const chatHistory =
+            queryPolicy.chatOnly === true && turnInput.runtimePolicy.cwd !== null
+              ? yield* fileSystem
+                  .readFileString(path.join(turnInput.runtimePolicy.cwd, CHAT_HISTORY_FILE))
+                  .pipe(Effect.option, Effect.map(Option.getOrUndefined))
+              : undefined;
           const queryOptions = makeClaudeQueryOptions({
             modelSelection: turnInput.modelSelection,
             nativeThreadId,
@@ -8571,6 +8593,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             onUserDialog,
             supportedDialogKinds: ["resume_return"],
             ...(queryPolicy.chatOnly === true ? { chatOnly: true } : {}),
+            ...(chatHistory === undefined ? {} : { chatHistory }),
           });
           const querySession = yield* queryRunner
             .open({

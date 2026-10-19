@@ -258,6 +258,27 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     );
   });
 
+  it("gives an imported chat its earlier conversation as context", () => {
+    const options = ClaudeAdapterV2.makeClaudeQueryOptions({
+      modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+      nativeThreadId: "imported-chat",
+      resume: false,
+      cwd: "/home/user/.t3/chats/2026-10-20-trip",
+      tools: [],
+      chatOnly: true,
+      chatHistory: "# Trip\n\n### User\n\nPlan Lisbon",
+    });
+    assert.isString(options.systemPrompt);
+    const prompt = options.systemPrompt as string;
+    assert.isTrue(prompt.startsWith(ClaudeAdapterV2.CLAUDE_CHAT_SYSTEM_PROMPT));
+    assert.include(prompt, "<earlier_conversation>\n# Trip");
+    assert.include(prompt, "Plan Lisbon");
+    assert.equal(
+      ClaudeAdapterV2.claudeChatSystemPrompt("  "),
+      ClaudeAdapterV2.CLAUDE_CHAT_SYSTEM_PROMPT,
+    );
+  });
+
   it("keeps the Claude Code persona for coding threads", () => {
     const options = ClaudeAdapterV2.makeClaudeQueryOptions({
       modelSelection: CLAUDE_TEST_MODEL_SELECTION,
