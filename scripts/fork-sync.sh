@@ -1,15 +1,31 @@
 #!/usr/bin/env bash
-# Pull pingdotgg/t3code into this fork and keep local changes on top.
+# Pull pingdotgg/t3code into this fork and carry every feature branch along.
 #
-#   scripts/fork-sync.sh            sync main + the feature branch, push to the fork
-#   scripts/fork-sync.sh --install  also rebuild the macOS app and install it
+#   scripts/fork-sync.sh            sync main, each feature branch and my-t3, push them
+#   scripts/fork-sync.sh --install  also rebuild the macOS app from my-t3 and install it
 #
-# main mirrors upstream exactly; your changes live on FEATURE_BRANCH, which gets
-# upstream merged in (merge, not rebase, so the fork never needs a force push).
+# main mirrors upstream exactly. Each feature branch is refreshed from the
+# branch it is built on, then my-t3 merges them all; my-t3 is what gets built
+# and shared. Merges, not rebases, so nothing ever needs a force push.
 set -euo pipefail
 
-FEATURE_BRANCH="${FEATURE_BRANCH:-feat/claude-chat-mode}"
+# "branch:base" in dependency order: a branch built on another lists it as base.
+# A new feature branched off main is added as "feat/name:main".
+FEATURE_BRANCHES=(
+  "feat/claude-chat-mode:main"
+  "feat/keep-awake:feat/claude-chat-mode"
+)
+INTEGRATION_BRANCH="my-t3"
 APP_NAME="T3 Code (Beta).app"
+
+# Switching branches rewrites this file, and bash reads scripts as it runs,
+# so run from a private copy.
+if [[ -z "${FORK_SYNC_COPY:-}" ]]; then
+  copy="$(mktemp -t fork-sync)"
+  cp "$0" "$copy"
+  FORK_SYNC_COPY=1 exec bash "$copy" "$@"
+fi
+
 INSTALL=false
 [[ "${1:-}" == "--install" ]] && INSTALL=true
 
@@ -20,6 +36,18 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
+merge_or_stop() {
+  local into="$1" from="$2"
+  git checkout --quiet "$into"
+  if ! git merge --no-edit "$from"; then
+    echo >&2
+    echo "Merge conflicts merging $from into $into. Fix the files listed by 'git status', then run:" >&2
+    echo "  git add -A && git commit --no-edit && scripts/fork-sync.sh" >&2
+    exit 1
+  fi
+  git push origin "$into"
+}
+
 echo "==> Fetching upstream"
 git fetch upstream --tags --prune
 
@@ -28,22 +56,24 @@ git checkout --quiet main
 git merge --ff-only upstream/main
 git push origin main
 
-echo "==> Merging upstream into $FEATURE_BRANCH"
-git checkout --quiet "$FEATURE_BRANCH"
-if ! git merge --no-edit upstream/main; then
-  echo >&2
-  echo "Merge conflicts. Fix the files listed by 'git status', then run:" >&2
-  echo "  git add -A && git commit --no-edit && git push origin $FEATURE_BRANCH" >&2
-  exit 1
-fi
-git push origin "$FEATURE_BRANCH"
+for entry in "${FEATURE_BRANCHES[@]}"; do
+  branch="${entry%%:*}"
+  base="${entry#*:}"
+  echo "==> Updating $branch from $base"
+  merge_or_stop "$branch" "$base"
+done
+
+echo "==> Combining everything into $INTEGRATION_BRANCH"
+for entry in "${FEATURE_BRANCHES[@]}"; do
+  merge_or_stop "$INTEGRATION_BRANCH" "${entry%%:*}"
+done
 
 if [[ "$INSTALL" == true ]]; then
   echo "==> Installing dependencies"
   pnpm install --frozen-lockfile
   export PATH="$PWD/node_modules/.bin:/opt/homebrew/opt/rustup/bin:$PATH"
 
-  echo "==> Building the macOS app"
+  echo "==> Building the macOS app from $INTEGRATION_BRANCH"
   rm -rf release
   node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch "$(uname -m)" --output-dir release
 
@@ -59,4 +89,4 @@ if [[ "$INSTALL" == true ]]; then
   echo "Installed /Applications/$APP_NAME"
 fi
 
-echo "==> Done. $FEATURE_BRANCH is up to date with upstream."
+echo "==> Done. You're on $INTEGRATION_BRANCH, up to date with upstream."
