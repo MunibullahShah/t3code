@@ -84,6 +84,42 @@ yay -S t3code-nightly-bin
 
 The AUR packaging is maintained in this repository under [`packaging/aur`](./packaging/aur).
 
+## Bring your Claude chats into T3
+
+This build can import your claude.ai and Claude Desktop conversations, along with Claude's memory about you and your Claude Projects. You can then keep chatting in them from T3. Claude keeps these chats on its servers, so you get them through Claude's data export.
+
+### 1. Export your data from Claude
+
+1. Open [claude.ai](https://claude.ai) in a browser, or open the Claude Desktop app.
+2. Click your name or initials in the bottom-left corner, then **Settings**.
+3. Open **Privacy** and click **Export data**.
+4. Claude emails you a download link, usually within a few minutes. It can take longer for large accounts. The link expires after about a day, so download soon.
+5. Download the zip. You don't need to unzip it. If you do, keep the files together in one folder (`conversations.json`, `memories/`, `projects/`).
+
+The export is everything in your account: every conversation, your memory, and your Projects with their instructions and documents. Keep it private.
+
+### 2. Import it into T3
+
+1. In T3, open **Settings → General → Chats → Import from Claude**. You can also use **Import Claude conversations…** in the command palette (`⌘K`), or **Import chats…** on the welcome screen.
+2. Click **Browse…** and pick the folder that holds the export zip, or the folder you unzipped it into. You can also paste the path to the folder, the zip, or `conversations.json`.
+3. Click **Import**.
+
+Each conversation becomes a chat you can continue, and Claude gets the earlier conversation back as context. Your memory is used in every new chat. Your Projects appear in the sidebar, and chats you start inside one follow its instructions and use its documents. Importing the same export again only adds chats that aren't already there.
+
+To see your chats the way Claude Desktop shows them, switch to **Chat mode** with the button at the bottom of the sidebar.
+
+#### Putting chats back in their projects
+
+Claude's export doesn't record which project each chat belonged to, so imported chats start in the general chat list. To place them in their projects, put a file named `t3-project-assignments.json` next to `conversations.json`. It maps each conversation ID to a project ID, both taken from the export:
+
+```json
+{
+  "<conversation uuid>": "<project uuid>"
+}
+```
+
+Then import again. Chats you haven't continued in T3 move into their projects. Chats you've already added messages to stay where they are.
+
 ## Some notes
 
 We are very very early in this project. Expect bugs.
