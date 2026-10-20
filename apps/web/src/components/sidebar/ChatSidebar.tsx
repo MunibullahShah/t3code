@@ -114,7 +114,11 @@ export default function ChatSidebar() {
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton onClick={startChat} disabled={chatEnvironment === null}>
+              <SidebarMenuButton
+                variant="strong"
+                onClick={startChat}
+                disabled={chatEnvironment === null}
+              >
                 <PlusIcon />
                 <span>New</span>
               </SidebarMenuButton>
@@ -127,6 +131,7 @@ export default function ChatSidebar() {
                 <SidebarMenuItem key={key} className="mt-1">
                   <div className="group/chat-project flex items-center">
                     <SidebarMenuButton
+                      variant="strong"
                       className="min-w-0 flex-1"
                       title={`New chat in ${project.title}`}
                       onClick={() => startProjectChat(project)}
@@ -175,6 +180,7 @@ export default function ChatSidebar() {
             {model.chats.map((thread) => (
               <SidebarMenuItem key={threadKeyOf(thread)}>
                 <SidebarMenuButton
+                  variant="strong"
                   isActive={activeThreadKey === threadKeyOf(thread)}
                   onClick={() => openThread(thread)}
                 >

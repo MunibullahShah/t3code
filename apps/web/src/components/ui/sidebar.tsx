@@ -683,6 +683,8 @@ const sidebarMenuButtonVariants = cva(
       variant: {
         default: "font-medium text-sidebar-muted-foreground/80",
         outline: "bg-sidebar-control-surface ring-1 ring-sidebar-border",
+        // Primary rows that read as content, not chrome (Chat mode's chat list).
+        strong: "text-sidebar-foreground",
       },
     },
   },
