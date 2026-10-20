@@ -168,3 +168,7 @@ Architecture and its constraints: `docs/internals/overview.md`. Glossary: `docs/
 
 - Don't verify with browsers or computer use unless the user explicitly agrees or requests it.
 - Security is important, but should not be over-indexed on, especially for dev mode/maintainer-only features.
+
+## This fork
+
+This checkout is a personal fork. Read [FORK.md](FORK.md) for its branches, features, sync and release workflow before changing anything.
