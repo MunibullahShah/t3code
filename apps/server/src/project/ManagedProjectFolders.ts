@@ -289,14 +289,14 @@ const make = Effect.gen(function* () {
       .makeDirectory(folder, { recursive: true })
       .pipe(Effect.mapError((cause) => new ScratchFolderError({ folder, cause })));
 
-  const ensureManagedProject = (spec: {
-    readonly root: Effect.Effect<Option.Option<string>>;
-    readonly kind: string;
-    readonly title: string;
-    readonly iconName: string;
-    readonly defaultModelSelection?: ModelSelection;
-  }) =>
-    Effect.gen(function* () {
+  const ensureManagedProject = Effect.fn("ManagedProjectFolders.ensureManagedProject")(
+    function* (spec: {
+      readonly root: Effect.Effect<Option.Option<string>>;
+      readonly kind: string;
+      readonly title: string;
+      readonly iconName: string;
+      readonly defaultModelSelection?: ModelSelection;
+    }) {
       const workspaceRoot = yield* spec.root.pipe(
         Effect.flatMap(
           Option.match({
@@ -342,7 +342,8 @@ const make = Effect.gen(function* () {
           .pipe(Effect.mapError((cause) => new ScratchProjectError({ workspaceRoot, cause })));
       }
       return { projectId: bootstrapped.project.id };
-    });
+    },
+  );
 
   const ensureScratchProject: ManagedProjectFolders["Service"]["ensureScratchProject"] =
     ensureManagedProject({
