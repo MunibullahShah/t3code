@@ -225,6 +225,7 @@ import {
   sortInboxThreadsByReturn,
   sortPinnedThreadsForSidebar,
   sortThreadsForSidebar,
+  sortChatsByRecency,
   sortWorkingThreadsBySend,
   useThreadJumpHintVisibility,
   useRetainedValue,
@@ -390,6 +391,7 @@ interface SidebarThreadPartitionInput {
   // Snooze wakes and the queued-turn grace depend on the clock, so the minute
   // tick and the precise snooze-wake tick are inputs: a new key repartitions.
   readonly clockKey: string;
+  readonly chatMode: boolean;
 }
 
 function threadShellKey(thread: Pick<SidebarThreadSummary, "environmentId" | "id">): string {
@@ -449,9 +451,16 @@ function useSidebarThreads(input: {
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly routeThreadKey: string | null;
+  readonly chatMode: boolean;
 }) {
-  const { projectScopeKey, scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey } =
-    input;
+  const {
+    projectScopeKey,
+    scopedProjectKeys,
+    serverConfigs,
+    optimisticDrop,
+    routeThreadKey,
+    chatMode,
+  } = input;
   const threads = useThreadShells();
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const nowMinute = useNowMinute();
@@ -495,6 +504,7 @@ function useSidebarThreads(input: {
     serverConfigs,
     optimisticDrop,
     workingShelfEnabled,
+    chatMode,
     clockKey: `${nowMinute}:${snoozeWakeTick}`,
   });
   const partitionNextWakeAt = partition.snoozedThreads[0]?.snoozedUntil ?? null;
@@ -583,7 +593,14 @@ function useSidebarThreads(input: {
 }
 
 function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
-  const { threads, scopedProjectKeys, serverConfigs, optimisticDrop, workingShelfEnabled } = input;
+  const {
+    threads,
+    scopedProjectKeys,
+    serverConfigs,
+    optimisticDrop,
+    workingShelfEnabled,
+    chatMode,
+  } = input;
   const preciseNow = new Date().toISOString();
   const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
   inboxReturns.observe(workingShelfEnabled ? threads : null);
@@ -625,7 +642,8 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     } else {
       const section = resolveSidebarThreadSection({
         snoozed: supportsSnooze && effectiveSnoozed(thread, { now: preciseNow }),
-        settled: supportsSettlement && thread.settledOverride === "settled",
+        // Chats have no inbox to clear: settled ones stay in the one list.
+        settled: !chatMode && supportsSettlement && thread.settledOverride === "settled",
         pinned: thread.pinnedAt != null,
       });
       (section === "snoozed"
@@ -642,9 +660,11 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   // sort, or mixed-version fleets would render different pinned orders on
   // web and mobile from the same data.
   const sortedPinned = sortPinnedThreadsForSidebar(pinned);
-  const sortedActive = workingShelfEnabled
-    ? sortInboxThreadsByReturn(active, inboxReturns.returnedAt)
-    : sortThreadsForSidebar(active);
+  const sortedActive = chatMode
+    ? sortChatsByRecency(active)
+    : workingShelfEnabled
+      ? sortInboxThreadsByReturn(active, inboxReturns.returnedAt)
+      : sortThreadsForSidebar(active);
   return {
     pinnedThreads:
       optimisticDrop?.section !== "pinned" || optimisticDrop.order === null
@@ -3039,6 +3059,7 @@ export default function Sidebar() {
     serverConfigs,
     optimisticDrop,
     routeThreadKey,
+    chatMode,
   });
 
   const isSearchingThreads = threadSearchQuery.trim().length > 0;

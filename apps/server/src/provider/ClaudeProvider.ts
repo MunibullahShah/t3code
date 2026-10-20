@@ -509,12 +509,18 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     });
   }
 
-  const versionProbe = yield* runClaudeCommand(
+  const probeVersion = runClaudeCommand(
     claudeSettings,
     ["--version"],
     resolvedEnvironment,
     cwd,
-  ).pipe(Effect.timeoutOption(DEFAULT_TIMEOUT_MS), Effect.result);
+  ).pipe(Effect.timeoutOption(DEFAULT_TIMEOUT_MS));
+  // Claude Code updates itself in place; a probe that lands mid-update hangs
+  // until the new binary is linked, so one retry rides that out.
+  const versionProbe = yield* probeVersion.pipe(
+    Effect.flatMap((result) => (Option.isNone(result) ? probeVersion : Effect.succeed(result))),
+    Effect.result,
+  );
 
   if (Result.isFailure(versionProbe)) {
     const error = versionProbe.failure;

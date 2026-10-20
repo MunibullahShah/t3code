@@ -89,8 +89,9 @@ function chatThread(input: {
     createdAt,
     updatedAt,
     archivedAt: null,
-    settledOverride: "settled",
-    settledAt: updatedAt,
+    // Imported chats are ordinary conversations, not finished inbox items.
+    settledOverride: null,
+    settledAt: null,
     unsettledAt: null,
     snoozedUntil: null,
     snoozedAt: null,

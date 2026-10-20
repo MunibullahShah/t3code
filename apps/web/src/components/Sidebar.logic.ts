@@ -993,6 +993,26 @@ export function firstValidTimestampMs(
 }
 
 export { sortActiveThreadsByOrderKey as sortThreadsForSidebar } from "@t3tools/client-runtime/state/thread-sort";
+
+const chatActivityMs = (thread: {
+  readonly latestUserMessageAt: string | null;
+  readonly updatedAt: string;
+  readonly createdAt: string;
+}) => {
+  const at = Date.parse(thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt);
+  return Number.isNaN(at) ? 0 : at;
+};
+
+/** Chat mode lists chats like Claude Desktop: most recent conversation first. */
+export function sortChatsByRecency<
+  T extends {
+    readonly latestUserMessageAt: string | null;
+    readonly updatedAt: string;
+    readonly createdAt: string;
+  },
+>(threads: readonly T[]): T[] {
+  return threads.toSorted((left, right) => chatActivityMs(right) - chatActivityMs(left));
+}
 export {
   isThreadWorking as isSidebarThreadWorking,
   sortInboxThreadsByReturn,
