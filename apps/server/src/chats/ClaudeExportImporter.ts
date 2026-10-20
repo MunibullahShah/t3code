@@ -1,5 +1,6 @@
 import {
   ClaudeExportImportError,
+  CommandId,
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -50,6 +51,30 @@ const CLAUDE_DRIVER = ProviderDriverKind.make("claudeAgent");
 const MAX_IMPORTED_MESSAGES = 1000;
 
 const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
+
+const decodeAssignments = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.String));
+
+interface ImportedProject {
+  readonly projectId: ProjectId;
+  readonly workspaceRoot: string;
+}
+
+const importedMessages = (conversation: ClaudeExportConversation) =>
+  conversation.messages.slice(-MAX_IMPORTED_MESSAGES);
+
+export const importedProjectChatThreadId = (conversationUuid: string) =>
+  ThreadId.make(`import:claude-ai:${conversationUuid}:project`);
+
+function chatFolderName(conversation: ClaudeExportConversation): string {
+  const words = conversation.title
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .join("-")
+    .slice(0, 48);
+  return [words || "chat", conversation.uuid.replace(/-/g, "").slice(0, 8)].join("-");
+}
 
 const invalid = (detail: string) => new ClaudeExportImportError({ reason: "invalid", detail });
 
@@ -113,7 +138,41 @@ const make = Effect.gen(function* () {
   const threadExists = (threadId: ThreadId) =>
     Effect.option(orchestrator.getThreadRecords(threadId, [])).pipe(Effect.map(Option.isSome));
 
-  const importConversation = Effect.fn("ClaudeExportImporter.importConversation")(function* (
+  const writeChat = Effect.fn("ClaudeExportImporter.writeChat")(function* (input: {
+    readonly threadId: ThreadId;
+    readonly projectId: ProjectId;
+    readonly folder: string;
+    readonly conversation: ClaudeExportConversation;
+  }) {
+    const { threadId, conversation } = input;
+    yield* fileSystem.writeFileString(
+      path.join(input.folder, CHAT_HISTORY_FILE),
+      renderChatHistory(conversation),
+    );
+    const thread = chatThread({
+      threadId,
+      projectId: input.projectId,
+      conversation,
+      worktreePath: input.folder,
+    });
+    yield* eventSink.write({
+      events: [
+        {
+          id: EventId.make(`${IMPORT_EVENT_PREFIX}:thread:${threadId}:created`),
+          type: "thread.created",
+          threadId,
+          providerInstanceId: thread.providerInstanceId,
+          occurredAt: thread.createdAt,
+          payload: thread,
+        },
+        ...importedMessages(conversation).flatMap((message, index) =>
+          messageEvents({ threadId, index, message }),
+        ),
+      ],
+    });
+  });
+
+  const importToChats = Effect.fn("ClaudeExportImporter.importToChats")(function* (
     projectId: ProjectId,
     conversation: ClaudeExportConversation,
   ) {
@@ -130,26 +189,37 @@ const make = Effect.gen(function* () {
         detail: "Chats are not available on this machine.",
       });
     }
-    yield* fileSystem.writeFileString(
-      path.join(folder.value, CHAT_HISTORY_FILE),
-      renderChatHistory(conversation),
-    );
-    const thread = chatThread({ threadId, projectId, conversation, worktreePath: folder.value });
-    const messages = conversation.messages.slice(-MAX_IMPORTED_MESSAGES);
-    yield* eventSink.write({
-      events: [
-        {
-          id: EventId.make(`${IMPORT_EVENT_PREFIX}:thread:${threadId}:created`),
-          type: "thread.created",
-          threadId,
-          providerInstanceId: thread.providerInstanceId,
-          occurredAt: thread.createdAt,
-          payload: thread,
-        },
-        ...messages.flatMap((message, index) => messageEvents({ threadId, index, message })),
-      ],
-    });
+    yield* writeChat({ threadId, projectId, folder: folder.value, conversation });
     return "imported" as const;
+  });
+
+  /**
+   * Inside the project's folder, so the chat finds the project's context file
+   * one level up. A copy imported earlier into Chats moves here only while it
+   * still holds exactly what was imported; a chat the user continued stays put.
+   */
+  const importToProject = Effect.fn("ClaudeExportImporter.importToProject")(function* (
+    project: ImportedProject,
+    conversation: ClaudeExportConversation,
+  ) {
+    const threadId = importedProjectChatThreadId(conversation.uuid);
+    if (yield* threadExists(threadId)) return "already-imported" as const;
+    const earlierId = importedChatThreadId(conversation.uuid);
+    if (yield* threadExists(earlierId)) {
+      const messageCount = yield* orchestrator
+        .getMessageCount(earlierId)
+        .pipe(Effect.orElseSucceed(() => -1));
+      if (messageCount !== importedMessages(conversation).length) return "kept" as const;
+      yield* orchestrator.dispatch({
+        type: "thread.delete",
+        commandId: CommandId.make(`${IMPORT_EVENT_PREFIX}:move:${earlierId}`),
+        threadId: earlierId,
+      });
+    }
+    const folder = path.join(project.workspaceRoot, chatFolderName(conversation));
+    yield* fileSystem.makeDirectory(folder, { recursive: true });
+    yield* writeChat({ threadId, projectId: project.projectId, folder, conversation });
+    return "placed" as const;
   });
 
   const parseJsonTexts = (texts: ReadonlyArray<string>) =>
@@ -180,28 +250,28 @@ const make = Effect.gen(function* () {
     const projects = (yield* parseJsonTexts(texts)).flatMap((json) =>
       Option.toArray(parseClaudeProject(json)),
     );
-    let count = 0;
+    const imported = new Map<string, ImportedProject>();
     for (const project of projects) {
       const saved = yield* folders
         .ensureChatSubProject({ key: project.uuid, title: project.name })
         .pipe(
-          Effect.flatMap(({ workspaceRoot }) =>
+          Effect.tap(({ workspaceRoot }) =>
             fileSystem.writeFileString(
               path.join(workspaceRoot, CHAT_PROJECT_CONTEXT_FILE),
               renderProjectContext(project),
             ),
           ),
-          Effect.as(true),
+          Effect.map(Option.some),
           Effect.catch((cause) =>
             Effect.logWarning("Could not import a Claude Project", {
               project: project.uuid,
               cause,
-            }).pipe(Effect.as(false)),
+            }).pipe(Effect.as(Option.none<ImportedProject>())),
           ),
         );
-      if (saved) count += 1;
+      if (Option.isSome(saved)) imported.set(project.uuid, saved.value);
     }
-    return count;
+    return imported;
   });
 
   const importExport = Effect.fn("ClaudeExportImporter.importExport")(function* (
@@ -230,30 +300,49 @@ const make = Effect.gen(function* () {
           new ClaudeExportImportError({ reason: "chats-unavailable", detail: cause.message }),
       ),
     );
+    // Projects first: assigned chats are created inside them.
+    const projects = yield* importProjects(files.projects);
+    const assignments =
+      files.assignments === undefined
+        ? {}
+        : Option.getOrElse(
+            Option.flatMap(
+              yield* decodeJson(files.assignments).pipe(Effect.option),
+              decodeAssignments,
+            ),
+            () => ({}),
+          );
     let importedCount = 0;
     let alreadyImportedCount = 0;
+    let placedInProjectCount = 0;
     let skippedCount = parsed.skippedCount;
     for (const conversation of parsed.conversations) {
-      const outcome = yield* importConversation(projectId, conversation).pipe(
-        Effect.catch((cause) =>
-          Effect.logWarning("Could not import a Claude conversation", {
-            conversation: conversation.uuid,
-            cause,
-          }).pipe(Effect.as("failed" as const)),
-        ),
-      );
+      const projectUuid = assignments[conversation.uuid]?.toLowerCase();
+      const project = projectUuid === undefined ? undefined : projects.get(projectUuid);
+      const failed = (cause: unknown) =>
+        Effect.logWarning("Could not import a Claude conversation", {
+          conversation: conversation.uuid,
+          cause,
+        }).pipe(Effect.as("failed" as const));
+      const outcome =
+        project === undefined
+          ? yield* importToChats(projectId, conversation).pipe(Effect.catch(failed))
+          : yield* importToProject(project, conversation).pipe(Effect.catch(failed));
       if (outcome === "imported") importedCount += 1;
-      else if (outcome === "already-imported") alreadyImportedCount += 1;
+      else if (outcome === "placed") {
+        importedCount += 1;
+        placedInProjectCount += 1;
+      } else if (outcome === "already-imported" || outcome === "kept") alreadyImportedCount += 1;
       else skippedCount += 1;
     }
     const memoryImported = yield* importMemory(files.memories);
-    const projectCount = yield* importProjects(files.projects);
     return {
       importedCount,
       alreadyImportedCount,
       skippedCount,
       memoryImported,
-      projectCount,
+      projectCount: projects.size,
+      placedInProjectCount,
     } satisfies ClaudeExportImportResult;
   });
 

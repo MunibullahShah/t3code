@@ -38,6 +38,9 @@ const harness = (root: string) => {
   const writes: Array<ReadonlyArray<OrchestrationV2DomainEvent>> = [];
   const existing = new Set<ThreadId>();
   const subProjects: Array<string> = [];
+  const deleted: Array<ThreadId> = [];
+  // Messages the user added in T3 after an import, per thread.
+  const extraMessages = new Map<ThreadId, number>();
   const layer = ClaudeExportImporter.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -66,6 +69,21 @@ const harness = (root: string) => {
             }).pipe(Effect.provide(NodeServices.layer)),
         }),
         Layer.mock(Orchestrator.OrchestratorV2)({
+          getMessageCount: (threadId) =>
+            Effect.succeed(
+              writes
+                .flat()
+                .filter((event) => event.threadId === threadId && event.type === "message.updated")
+                .length + (extraMessages.get(threadId) ?? 0),
+            ),
+          dispatch: (command) =>
+            Effect.sync(() => {
+              if (command.type === "thread.delete") {
+                deleted.push(command.threadId);
+                existing.delete(command.threadId);
+              }
+              return {} as never;
+            }),
           getThreadRecords: (threadId) =>
             existing.has(threadId)
               ? Effect.succeed({ thread: { id: threadId } } as never)
@@ -82,7 +100,7 @@ const harness = (root: string) => {
       ),
     ),
   );
-  return { layer, writes, subProjects };
+  return { layer, writes, subProjects, deleted, extraMessages };
 };
 
 it.effect("imports a claude.ai export into Chats once, with a history file per chat", () =>
@@ -118,6 +136,7 @@ it.effect("imports a claude.ai export into Chats once, with a history file per c
         skippedCount: 1,
         memoryImported: true,
         projectCount: 1,
+        placedInProjectCount: 0,
       });
       const again = yield* importer.importExport({
         path: path.join(exportDir, "conversations.json"),
@@ -188,5 +207,56 @@ it.effect("rejects JSON that is not a Claude export", () =>
       Effect.provide(layer),
     );
     assert.equal(error.reason, "invalid");
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect("moves untouched chats into their assigned project, and keeps continued ones", () =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const exportDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "claude-export-" });
+    const chatsRoot = yield* fileSystem.makeTempDirectoryScoped({ prefix: "chats-" });
+    const projectUuid = "019d0341-04b0-7359-a7e3-4d83cbb5f10d";
+    const otherUuid = "22222222-3333-4444-8555-666666666666";
+    const second = JSON.parse(exportJson)[0];
+    second.uuid = otherUuid;
+    second.name = "Kept chat";
+    const conversations = [JSON.parse(exportJson)[0], second];
+    yield* fileSystem.writeFileString(
+      path.join(exportDir, "conversations.json"),
+      JSON.stringify(conversations),
+    );
+    yield* fileSystem.makeDirectory(path.join(exportDir, "projects"));
+    yield* fileSystem.writeFileString(
+      path.join(exportDir, "projects", "p.json"),
+      JSON.stringify({ uuid: projectUuid, name: "Travel", docs: [] }),
+    );
+    const { layer, writes, deleted, extraMessages } = harness(chatsRoot);
+
+    yield* Effect.gen(function* () {
+      const importer = yield* ClaudeExportImporter.ClaudeExportImporter;
+      yield* importer.importExport({ path: exportDir });
+      // The user keeps talking in one chat before projects are assigned.
+      extraMessages.set(ClaudeExportImporter.importedChatThreadId(otherUuid), 2);
+      yield* fileSystem.writeFileString(
+        path.join(exportDir, "t3-project-assignments.json"),
+        JSON.stringify({ [UUID]: projectUuid, [otherUuid]: projectUuid }),
+      );
+      const result = yield* importer.importExport({ path: exportDir });
+      assert.equal(result.placedInProjectCount, 1);
+      assert.equal(result.alreadyImportedCount, 1);
+    }).pipe(Effect.provide(layer));
+
+    assert.deepEqual(deleted, [ClaudeExportImporter.importedChatThreadId(UUID)]);
+    const placed = writes
+      .flat()
+      .find(
+        (event) =>
+          event.type === "thread.created" &&
+          event.threadId === ClaudeExportImporter.importedProjectChatThreadId(UUID),
+      );
+    assert.include(placed?.payload as object, { projectId: `sub-${projectUuid}` });
+    const folder = (placed!.payload as { worktreePath: string }).worktreePath;
+    assert.equal(path.dirname(folder), path.join(chatsRoot, "projects", projectUuid));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

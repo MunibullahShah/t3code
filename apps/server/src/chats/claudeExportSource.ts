@@ -8,6 +8,12 @@ import type * as NodeStream from "node:stream";
 import { openZipArchive } from "../zipArchive.ts";
 
 export const CONVERSATIONS_FILE = "conversations.json";
+/**
+ * Optional, written beside conversations.json: `{ conversationUuid: projectUuid }`.
+ * Claude's export does not record which project a chat was in, so this map
+ * (built from the user's own project lists) puts chats back in their projects.
+ */
+export const PROJECT_ASSIGNMENTS_FILE = "t3-project-assignments.json";
 const EXTRA_FOLDERS = ["memories", "projects"] as const;
 type ExtraFolder = (typeof EXTRA_FOLDERS)[number];
 
@@ -16,6 +22,7 @@ export interface ClaudeExportFiles {
   /** Raw text of each memories/*.json and projects/*.json, when present. */
   readonly memories: ReadonlyArray<string>;
   readonly projects: ReadonlyArray<string>;
+  readonly assignments?: string;
 }
 // Large accounts export hundreds of MB; past this, JSON.parse would stall the server.
 const MAX_EXPORT_BYTES = 1024 * 1024 * 1024;
@@ -73,7 +80,7 @@ const readFromZip = Effect.fn("claudeExport.readFromZip")(function* (zipPath: st
       if (conversations === null) {
         return yield* notFound(`${path.basename(zipPath)} has no ${CONVERSATIONS_FILE}.`);
       }
-      return { conversations, ...extras } satisfies ClaudeExportFiles;
+      return { conversations, memories: extras.memories, projects: extras.projects };
     }),
   );
 });
@@ -93,7 +100,14 @@ const readExtrasBeside = Effect.fn("claudeExport.readExtrasBeside")(function* (f
       ),
       Effect.map((texts) => texts.flatMap((text) => (text._tag === "Some" ? [text.value] : []))),
     );
-  return { memories: yield* readFolder("memories"), projects: yield* readFolder("projects") };
+  const assignments = yield* readJsonFile(path.join(folder, PROJECT_ASSIGNMENTS_FILE)).pipe(
+    Effect.option,
+  );
+  return {
+    memories: yield* readFolder("memories"),
+    projects: yield* readFolder("projects"),
+    ...(assignments._tag === "Some" ? { assignments: assignments.value } : {}),
+  };
 });
 
 const readJsonFile = Effect.fn("claudeExport.readJsonFile")(function* (filePath: string) {

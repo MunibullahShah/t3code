@@ -8599,10 +8599,15 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             queryPolicy.chatOnly === true
               ? {
                   memory: yield* readOptional(turnInput.runtimePolicy.chatRoot, CHAT_MEMORY_FILE),
-                  project: yield* readOptional(
-                    turnInput.runtimePolicy.cwd,
-                    CHAT_PROJECT_CONTEXT_FILE,
-                  ),
+                  // A project's chats sit in folders inside the project's folder.
+                  project:
+                    (yield* readOptional(turnInput.runtimePolicy.cwd, CHAT_PROJECT_CONTEXT_FILE)) ??
+                    (yield* readOptional(
+                      turnInput.runtimePolicy.cwd === null
+                        ? null
+                        : path.dirname(turnInput.runtimePolicy.cwd),
+                      CHAT_PROJECT_CONTEXT_FILE,
+                    )),
                   history: yield* readOptional(turnInput.runtimePolicy.cwd, CHAT_HISTORY_FILE),
                 }
               : undefined;

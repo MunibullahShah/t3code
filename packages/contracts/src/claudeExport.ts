@@ -18,6 +18,8 @@ export const ClaudeExportImportResult = Schema.Struct({
   memoryImported: Schema.optionalKey(Schema.Boolean),
   /** Claude Projects made into chat projects (new or refreshed). */
   projectCount: Schema.optionalKey(NonNegativeInt),
+  /** Chats placed in (or moved into) their Claude Project. */
+  placedInProjectCount: Schema.optionalKey(NonNegativeInt),
 });
 export type ClaudeExportImportResult = typeof ClaudeExportImportResult.Type;
 
