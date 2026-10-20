@@ -109,6 +109,7 @@ import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { RelativeTime } from "../RelativeTime";
 import { Button } from "../ui/button";
 import { ChatsSettingsSection } from "./ChatsSettings";
+import { useKeepAwake } from "../../hooks/useKeepAwake";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import {
   Dialog,
@@ -2085,6 +2086,10 @@ export function GeneralSettingsPanel() {
   const isEnvironmentScope = scope.environmentIds.length === 1 && environmentId !== null;
   const hasServerTargets = connectedEnvironments.length > 0;
   const [backgroundActivityDialogOpen, setBackgroundActivityDialogOpen] = useState(false);
+  const primaryKeepAwake = useKeepAwake();
+  // A remote environment answers for its own machine; otherwise the primary.
+  const keepAwakeSupported =
+    environment?.serverConfig?.keepAwakeSupported ?? primaryKeepAwake.supported;
   const mixedResponseStreamingMode = useScopedSettingsMixed(["responseStreamingMode"]);
   const lastEnabledProjectGroupingMode = useRef<SidebarProjectGroupingMode>(
     readLastEnabledProjectGroupingMode(),
@@ -2245,6 +2250,25 @@ export function GeneralSettingsPanel() {
           }
         />
 
+        <SettingsRow
+          serverScoped
+          {...searchableSetting("keep-awake")}
+          description={
+            keepAwakeSupported
+              ? "Stop this computer from sleeping while you're away, so agents keep working. The screen can still turn off."
+              : "This computer can't be kept awake by T3 Code (needs macOS, or Linux with systemd)."
+          }
+          settingKeys={["keepAwake"]}
+          control={
+            <ScopedSwitch
+              settingKeys={["keepAwake"]}
+              checked={settings.keepAwake}
+              disabled={!keepAwakeSupported}
+              onCheckedChange={(checked) => updateSettings({ keepAwake: Boolean(checked) })}
+              aria-label="Keep computer awake"
+            />
+          }
+        />
         <SettingsRow
           serverScoped
           {...searchableSetting("auto-resume-limited-threads")}

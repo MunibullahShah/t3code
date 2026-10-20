@@ -64,6 +64,16 @@ A missing file is ignored; other read failures stop service startup.
 If the file contains credentials, restrict access to that file with `chmod 600`
 (for the default T3 home, `chmod 600 ~/.t3/service.env`).
 
+## Keep the computer awake
+
+So agents keep working while you're away, turn on **Settings → General → Keep
+computer awake**, the coffee-cup button at the bottom of the sidebar, or **Keep
+this computer awake** in the command palette. While it's on, the computer
+running T3 Code won't idle-sleep, though its screen can still turn off. It stays
+on until you turn it off. It works on macOS and on Linux with systemd. On a
+Mac, closing the lid still sleeps the computer unless it's connected to power
+and an external display.
+
 ## Platform support
 
 Linux needs systemd user services. Setup enables lingering so T3 Code starts at

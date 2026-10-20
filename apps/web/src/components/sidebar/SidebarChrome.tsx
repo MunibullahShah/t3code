@@ -2,14 +2,17 @@ import {
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
   CodeXmlIcon,
+  CoffeeIcon,
   MessageCircleIcon,
   MessagesSquareIcon,
+  MoonIcon,
   SettingsIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
+import { useKeepAwake } from "../../hooks/useKeepAwake";
 import { useScratchProject } from "../../hooks/useScratchProject";
 import {
   updateClientSettings,
@@ -179,6 +182,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const { chatEnvironmentId, startChatThread } = useScratchProject();
   const chatTargetEnvironmentId = chatEnvironmentId(null);
   const chatMode = useClientSettings((settings) => settings.appMode) === "chat";
+  const keepAwake = useKeepAwake();
   const handleModeToggle = () => {
     void updateClientSettings({ appMode: chatMode ? "code" : "chat" });
   };
@@ -242,6 +246,17 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 />
               )}
             </>
+          ) : null}
+          {keepAwake.supported ? (
+            <SidebarUtilityItem
+              icon={keepAwake.enabled ? <CoffeeIcon /> : <MoonIcon />}
+              label={
+                keepAwake.enabled
+                  ? "Keeping this computer awake (click to allow sleep)"
+                  : "Keep this computer awake"
+              }
+              onClick={keepAwake.toggle}
+            />
           ) : null}
           <SidebarUtilityItem
             icon={<SettingsIcon />}

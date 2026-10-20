@@ -317,6 +317,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["usage quota rate limit reset wake recover continue"],
   },
   {
+    id: "keep-awake",
+    title: "Keep computer awake",
+    to: "/settings/general",
+    searchTerms: ["sleep awake caffeinate power lid battery idle prevent sleep"],
+  },
+  {
     id: "auto-resume-limited-threads",
     title: "Auto-resume limited threads",
     to: "/settings/general",

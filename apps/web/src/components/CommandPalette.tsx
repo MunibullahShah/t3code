@@ -61,6 +61,7 @@ import {
   ChartNoAxesColumnIcon,
   CheckIcon,
   CodeXmlIcon,
+  CoffeeIcon,
   DownloadIcon,
   ChevronRightIcon,
   CornerLeftUpIcon,
@@ -109,6 +110,7 @@ import {
 } from "./promptLinks/copyPromptLink";
 import { updateClientSettings, useClientSettings } from "../hooks/useSettings";
 import { useClaudeExportImport } from "../hooks/useClaudeExportImport";
+import { useKeepAwake } from "../hooks/useKeepAwake";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { useTheme } from "../hooks/useTheme";
 import { useCustomThemes } from "../hooks/useCustomThemes";
@@ -757,6 +759,7 @@ function OpenCommandPaletteDialog(props: {
     startChatThread,
   } = useScratchProject();
   const { importClaudeExport } = useClaudeExportImport();
+  const keepAwake = useKeepAwake();
   const lookupRepository = useAtomQueryRunner(sourceControlEnvironment.repository, {
     reportFailure: false,
   });
@@ -1637,6 +1640,23 @@ function OpenCommandPaletteDialog(props: {
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
       groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
+    });
+  }
+
+  if (keepAwake.supported) {
+    actionItems.push({
+      kind: "action",
+      value: "action:toggle-keep-awake",
+      searchTerms: ["keep awake", "sleep", "caffeinate", "power", "prevent sleep", "stay awake"],
+      title: keepAwake.enabled ? "Allow this computer to sleep" : "Keep this computer awake",
+      icon: keepAwake.enabled ? (
+        <MoonIcon className={ITEM_ICON_CLASS} />
+      ) : (
+        <CoffeeIcon className={ITEM_ICON_CLASS} />
+      ),
+      run: async () => {
+        keepAwake.toggle();
+      },
     });
   }
 
