@@ -12,7 +12,7 @@ A personal fork of [pingdotgg/t3code](https://github.com/pingdotgg/t3code) that 
 | `my-t3`                 | Integration branch: merges every feature branch. The fork's default branch. Built, installed and released. |
 
 - **New features:** run `git switch -c feat/<name> main`, then add `"feat/<name>:main"` to `FEATURE_BRANCHES` at the top of `scripts/fork-sync.sh` (on `my-t3`).
-- **Fork-wide files** (this file, the multi-branch sync script) live only on `my-t3`.
+- **Fork-wide files** (this file, the multi-branch sync script, and the fork's own `README.md`) live only on `my-t3`. On a sync conflict in `README.md`, keep the fork's version.
 - **Never** push to `upstream` (its push URL is set to `DISABLED`), and don't open pull requests to pingdotgg unless the user asks.
 - **Commits:** author `Munib <munibs47@gmail.com>`, which is the email on the user's GitHub account. Keep the `Co-Authored-By: Claude …` trailer; the user chose to keep it.
 
