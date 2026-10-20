@@ -1,4 +1,6 @@
 import { OrchestrationDispatchCommandError } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { keepAwakeCommand } from "./power/keepAwakeCommand.ts";
 import * as Crypto from "effect/Crypto";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 
@@ -1684,6 +1686,8 @@ export const layerWsRpc = (
         const auth = yield* serverAuth.getDescriptor();
         const scratchWorkspaceRoot = yield* managedFolders.scratchRoot;
         const chatWorkspaceRoot = yield* managedFolders.chatRoot;
+        const keepAwakeSupported =
+          keepAwakeCommand(yield* HostProcess.Platform, process.pid) !== null;
         const lastEventLoopStall = yield* eventLoopMonitor.latestNoticeableStall;
         const editorConfig = yield* resolveEditorConfig(
           yield* resolveAvailableEditorsForConfig(externalLauncher.resolveAvailableEditors()),
@@ -1729,6 +1733,7 @@ export const layerWsRpc = (
             onNone: () => ({}),
             onSome: (root) => ({ chatWorkspaceRoot: root }),
           }),
+          keepAwakeSupported,
           newProjectsRoot: managedFolders.namedProjectsRoot,
           ...(lastEventLoopStall === undefined ? {} : { lastEventLoopStall }),
         };

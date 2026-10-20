@@ -568,6 +568,7 @@ it.effect(
         Layer.mock(DirectEndpoints.DirectEndpoints)({ resolve: () => Effect.succeed([]) }),
         Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
           scratchRoot: Effect.succeedNone,
+          chatRoot: Effect.succeedNone,
           namedProjectsRoot: process.cwd(),
         }),
         Layer.mock(ServerEnvironment.ServerEnvironment)({

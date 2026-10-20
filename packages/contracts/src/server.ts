@@ -629,6 +629,8 @@ export const ServerConfig = Schema.Struct({
   threadFindProgressive: Schema.optionalKey(Schema.Boolean),
   scratchWorkspaceRoot: Schema.optionalKey(TrimmedNonEmptyString),
   chatWorkspaceRoot: Schema.optionalKey(TrimmedNonEmptyString),
+  /** The server can hold its machine awake (macOS and Linux with systemd). */
+  keepAwakeSupported: Schema.optionalKey(Schema.Boolean),
   newProjectsRoot: Schema.optionalKey(TrimmedNonEmptyString),
   /**
    * The latest stall long enough to notice, sent only for a few minutes after

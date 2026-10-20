@@ -1,4 +1,5 @@
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
+import * as KeepAwake from "./power/KeepAwake.ts";
 import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay";
 import * as Random from "effect/Random";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
@@ -558,8 +559,14 @@ const layerProviderInstallationRefresh = Layer.effectDiscard(
   }),
 );
 
+// Holds the machine awake while the keepAwake setting is on.
+const layerKeepAwakeWorker = Layer.effectDiscard(
+  KeepAwake.KeepAwake.pipe(Effect.flatMap((keepAwake) => Effect.forkScoped(keepAwake.run))),
+).pipe(Layer.provide(KeepAwake.layer));
+
 const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   AgentAwarenessRelay.layer,
+  layerKeepAwakeWorker,
   HeldHooksWaker.layer,
   layerThreadSettlementWorker,
   layerIdleCompactionWorker,
