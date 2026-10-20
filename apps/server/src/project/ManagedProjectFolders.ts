@@ -110,6 +110,7 @@ export class ManagedProjectFolders extends Context.Service<
       { readonly projectId: ProjectId; readonly workspaceRoot: string },
       ScratchError
     >;
+    readonly isScratchProject: (projectId: ProjectId) => Effect.Effect<boolean>;
     readonly folderForThread: (input: {
       readonly projectId: ProjectId;
       readonly threadId: ThreadId;
@@ -364,7 +365,7 @@ const make = Effect.gen(function* () {
       defaultModelSelection: CHAT_DEFAULT_MODEL_SELECTION,
     });
 
-  const isScratchProject = (projectId: ProjectId, root: string) =>
+  const isScratchRoot = (projectId: ProjectId, root: string) =>
     projects.getById(projectId).pipe(
       Effect.map(
         Option.exists((project) => path.resolve(project.workspaceRoot) === path.resolve(root)),
@@ -375,10 +376,19 @@ const make = Effect.gen(function* () {
   const managedRootForProject = Effect.fnUntraced(function* (projectId: ProjectId) {
     for (const candidate of [scratchRoot, chatRoot]) {
       const root = yield* candidate;
-      if (Option.isSome(root) && (yield* isScratchProject(projectId, root.value))) return root;
+      if (Option.isSome(root) && (yield* isScratchRoot(projectId, root.value))) return root;
     }
     return Option.none<string>();
   });
+  const isScratchProject: ManagedProjectFolders["Service"]["isScratchProject"] = (projectId) =>
+    scratchRoot.pipe(
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.succeed(false),
+          onSome: (root) => isScratchRoot(projectId, root),
+        }),
+      ),
+    );
 
   const folderForThread: ManagedProjectFolders["Service"]["folderForThread"] = Effect.fn(
     "ManagedProjectFolders.folderForThread",
@@ -556,6 +566,7 @@ const make = Effect.gen(function* () {
     chatRoot,
     ensureChatProject,
     ensureChatSubProject,
+    isScratchProject,
     folderForThread,
     namedProjectsRoot,
     createNamedProject,
