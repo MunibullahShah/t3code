@@ -144,12 +144,20 @@ export function mediaMimeTypeFromExtension(extension: string): string | null {
   );
 }
 
+// The file viewer converts these in the browser, so a linked chat's files outside
+// its workspace need host access too.
+const OFFICE_MIME_TYPE_BY_EXTENSION: ReadonlyMap<string, string> = new Map([
+  [".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+  [".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+]);
+
 export function hostPreviewMimeTypeFromExtension(extension: string): string | null {
   if (!/^\.[a-z0-9]+$/i.test(extension)) return null;
   return (
     mediaMimeTypeFromExtension(extension) ??
     audioMimeTypeFromExtension(extension) ??
     BROWSER_MIME_TYPE_BY_EXTENSION.get(extension.toLowerCase()) ??
+    OFFICE_MIME_TYPE_BY_EXTENSION.get(extension.toLowerCase()) ??
     null
   );
 }

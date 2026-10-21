@@ -1,5 +1,6 @@
 /* oxlint-disable react/no-array-index-key -- Table rows and columns have stable positions and may contain identical values. */
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
 import type { WorkspaceOfficePreviewKind } from "@t3tools/shared/filePreview";
 import { useEffect, useState } from "react";
 
@@ -54,8 +55,11 @@ export function WorkspaceOfficePreview(props: {
   readonly kind: WorkspaceOfficePreviewKind;
   readonly workspaceMutationId: string | null;
 }) {
+  // A linked chat's files live outside its workspace, so they load as host files.
+  const insideWorkspace =
+    mediaFileReference(props.absolutePath, props.workspaceRoot).relativePath !== undefined;
   const resource = workspaceAssetResource({
-    kind: "workspace-file",
+    kind: insideWorkspace ? "workspace-file" : "media-file",
     threadRef: props.threadRef,
     draft: props.draft,
     workspaceRoot: props.workspaceRoot,

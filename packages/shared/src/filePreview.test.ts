@@ -128,3 +128,15 @@ describe("workspaceOfficePreviewKind", () => {
     expect(workspaceOfficePreviewKind("notes.docx.md")).toBeNull();
   });
 });
+
+describe("hostPreviewMimeTypeFromExtension for office files", () => {
+  it("lets the viewer load workbooks and documents from outside the workspace", () => {
+    expect(hostPreviewMimeTypeFromExtension(".xlsx")).toBe(
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    expect(hostPreviewMimeTypeFromExtension(".DOCX")).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    expect(hostPreviewMimeTypeFromExtension(".xls")).toBeNull();
+  });
+});
