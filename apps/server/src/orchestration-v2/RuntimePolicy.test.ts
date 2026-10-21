@@ -1,3 +1,8 @@
+// @effect-diagnostics nodeBuiltinImport:off - The moved-chat layer needs its data dir before Effect runs.
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
@@ -236,6 +241,83 @@ it.layer(chatLayerTest)("RuntimePolicyV2 chats", (it) => {
       assert.equal(resolved.cwd, looseChat);
       assert.isTrue(resolved.chatOnly);
       yield* fs.remove(path.join(chatRoot, ".claude-linked-folder"));
+    }),
+  );
+});
+
+const movedChatBaseDir = NodeFS.mkdtempSync(
+  NodePath.join(NodeOS.tmpdir(), "t3-runtime-policy-moved-"),
+);
+const movedChatProjectRoot = NodePath.join(movedChatBaseDir, "chats", "projects", "everflow-1");
+
+const movedChatLayerTest = RuntimePolicy.layerFromProjectStore.pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      Layer.succeed(ProviderInstanceRegistry.ProviderInstanceRegistry, {
+        getInstance: (instanceId) => Effect.succeed(providerInstanceFor(instanceId)),
+        listInstances: Effect.succeed([]),
+        listUnavailable: Effect.succeed([]),
+        streamChanges: Stream.empty,
+        subscribeChanges: Effect.never,
+      }),
+      Layer.mock(ProjectStore.ProjectStoreV2)({
+        get: () =>
+          Effect.succeed(
+            Option.some({
+              projectId,
+              title: "Everflow",
+              workspaceRoot: movedChatProjectRoot,
+              defaultModelSelection: null,
+              defaultThreadEnvMode: null,
+              autoPull: false,
+              faviconPath: null,
+              projectIcon: null,
+              scripts: [],
+              createdAt: "2026-06-21T00:00:00.000Z",
+              updatedAt: "2026-06-21T00:00:00.000Z",
+              deletedAt: null,
+            }),
+          ),
+      }),
+    ),
+  ),
+  Layer.provideMerge(ServerConfig.layerTest(process.cwd(), movedChatBaseDir)),
+  Layer.provideMerge(NodeServices.layer),
+);
+
+it.layer(movedChatLayerTest)("RuntimePolicyV2 chats moved into a linked folder", (it) => {
+  it.effect("works in the linked folder and reads the chat's own context folder", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const linkedFolder = NodePath.join(movedChatBaseDir, "everflow-repo");
+      const ownFolder = NodePath.join(movedChatProjectRoot, "gl-review-65cd146c");
+      yield* fs.makeDirectory(linkedFolder, { recursive: true });
+      yield* fs.makeDirectory(ownFolder, { recursive: true });
+      yield* writeLink(movedChatProjectRoot, linkedFolder);
+      const policy = yield* RuntimePolicy.RuntimePolicyV2;
+      const now = yield* DateTime.now;
+      const thread = {
+        ...makeThread({ now, worktreePath: linkedFolder }),
+        id: ThreadId.make("import:claude-ai:65cd146c-0000-4000-8000-000000000000:project"),
+      };
+      const resolved = yield* policy.resolve({ thread, modelSelection });
+      assert.equal(resolved.cwd, linkedFolder);
+      assert.isUndefined(resolved.chatOnly);
+      assert.equal(resolved.chatContextDir, ownFolder);
+    }),
+  );
+
+  it.effect("treats any other folder as an ordinary coding thread", () =>
+    Effect.gen(function* () {
+      const policy = yield* RuntimePolicy.RuntimePolicyV2;
+      const now = yield* DateTime.now;
+      const resolved = yield* policy.resolve({
+        thread: makeThread({ now, worktreePath: "/somewhere/else" }),
+        modelSelection,
+      });
+      assert.equal(resolved.cwd, "/somewhere/else");
+      assert.isUndefined(resolved.chatContextDir);
+      assert.isUndefined(resolved.chatOnly);
     }),
   );
 });

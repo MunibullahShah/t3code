@@ -20,7 +20,6 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import { makeLinkedChatFolderResolver } from "../project/linkedChatFolder.ts";
 import * as KnownWorkspaces from "./KnownWorkspaces.ts";
 import * as WorkspaceEntries from "./WorkspaceEntries.ts";
 import * as WorkspacePaths from "./WorkspacePaths.ts";
@@ -139,8 +138,6 @@ export const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const workspacePaths = yield* WorkspacePaths.WorkspacePaths;
   const knownWorkspaces = yield* KnownWorkspaces.KnownWorkspaces;
-  // A linked chat's files live in its linked folder, not its own chat folder.
-  const linkedChats = yield* makeLinkedChatFolderResolver;
   const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
 
   const metadataForPath = Effect.fnUntraced(function* (requestedPath: string) {
@@ -329,8 +326,7 @@ export const make = Effect.gen(function* () {
 
   const readFile: WorkspaceFileSystem["Service"]["readFile"] = Effect.fn(
     "WorkspaceFileSystem.readFile",
-  )(function* (request) {
-    const input = { ...request, cwd: yield* linkedChats.workspaceFor(request.cwd) };
+  )(function* (input) {
     const target = yield* resolveReadTarget(input);
     const absentResult = {
       relativePath: target.relativePath,
@@ -527,9 +523,8 @@ export const make = Effect.gen(function* () {
 
   const writeFile: WorkspaceFileSystem["Service"]["writeFile"] = Effect.fn(
     "WorkspaceFileSystem.writeFile",
-  )(function* (request) {
-    yield* knownWorkspaces.assertContains(request.cwd);
-    const input = { ...request, cwd: yield* linkedChats.workspaceFor(request.cwd) };
+  )(function* (input) {
+    yield* knownWorkspaces.assertContains(input.cwd);
     const target = yield* resolveWriteTarget(input);
     const realTargetPath = target.realTargetPath;
 
