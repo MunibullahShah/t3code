@@ -4,13 +4,14 @@ A personal fork of [pingdotgg/t3code](https://github.com/pingdotgg/t3code) that 
 
 ## Branches and the one rule
 
-| Branch                     | Purpose                                                                                                    |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `main`                     | Exact mirror of `pingdotgg/main`. **Never commit here.** Sync fast-forwards it, and a commit breaks that.  |
-| `feat/claude-chat-mode`    | Chat mode, the Claude export import, Claude memory and Projects.                                           |
-| `feat/keep-awake`          | Keep-awake toggle. Built on `feat/claude-chat-mode`, not `main`.                                           |
-| `feat/linked-chat-folders` | Links a Claude Project to a real folder. Built on `feat/claude-chat-mode`, not `main`.                     |
-| `my-t3`                    | Integration branch: merges every feature branch. The fork's default branch. Built, installed and released. |
+| Branch                      | Purpose                                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `main`                      | Exact mirror of `pingdotgg/main`. **Never commit here.** Sync fast-forwards it, and a commit breaks that.  |
+| `feat/claude-chat-mode`     | Chat mode, the Claude export import, Claude memory and Projects.                                           |
+| `feat/keep-awake`           | Keep-awake toggle. Built on `feat/claude-chat-mode`, not `main`.                                           |
+| `feat/linked-chat-folders`  | Links a Claude Project to a real folder. Built on `feat/claude-chat-mode`, not `main`.                     |
+| `feat/sidebar-recency-pins` | Sorts threads by last use and adds chat pins. Built on `feat/claude-chat-mode`, not `main`.                |
+| `my-t3`                     | Integration branch: merges every feature branch. The fork's default branch. Built, installed and released. |
 
 - **New features:** run `git switch -c feat/<name> main`, then add `"feat/<name>:main"` to `FEATURE_BRANCHES` at the top of `scripts/fork-sync.sh` (on `my-t3`).
 - **Fork-wide files** (this file, the multi-branch sync script, the fork's own `README.md`, and the release workflow with its notes) live only on `my-t3`. On a sync conflict in `README.md`, keep the fork's version.
@@ -106,6 +107,12 @@ scripts/fork-sync.sh --install  # same, then build the macOS app from my-t3 and 
 - **Link or unlink:** write or delete the file. A live Claude process keeps its old folder until it restarts.
 - **The user's links:** Docwise → `~/Documents/Ambeego/Docwise`, Everflow Snowflake → `~/Documents/projects/everflow-snowflake`, message replier extension → `~/Documents/projects/message replier`. The other Claude Projects stay chat-only by choice.
 - **Not yet:** no UI to set a link, and the diff and checkpoint panels may still follow the project's chat folder (unchecked).
+
+## Feature 2c: Threads sorted by last use, pinned chats
+
+- **Code mode:** `partitionSidebarThreads` (`Sidebar.tsx`) lists active threads with `sortThreadsByLastUse` (the user's latest message, else latest activity) instead of upstream's creation/inbox order. Upstream tracks this as pingdotgg/t3code#16412. Dragging within the active list does nothing (`activeTimeOrdered: true`); pinning holds a spot, and pinned threads stay draggable.
+- **Chat mode:** right-click a chat for Pin/Unpin (`openChatMenu` in `ChatSidebar.tsx`, one handler for all rows). `buildChatSidebarModel` returns `pinned` chats in pin order and removes them from their project and loose lists.
+- **Merging upstream:** `Sidebar.tsx` is the hotspot. Keep upstream's change, then re-apply the single `sortThreadsByLastUse(active)` sort and `activeTimeOrdered: true` at both `planSidebarThreadDrop` call sites.
 
 ## Feature 3: Keep awake
 

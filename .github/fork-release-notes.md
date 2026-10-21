@@ -4,6 +4,7 @@ My build of [T3 Code](https://github.com/pingdotgg/t3code), with these additions
 - **Import from Claude.** Bring in your claude.ai / Claude Desktop conversations, memory and Projects from Claude's data export (Claude → Settings → Privacy → Export data), then continue any chat.
 - **Keep computer awake.** A toggle (moon/coffee icon in the sidebar, or Settings → General) that stops the computer from sleeping so agents keep working. The screen can still turn off.
 - **Link a Claude Project to a real folder.** Put a `.claude-linked-folder` file in a Claude Project's folder (`~/.t3/chats/projects/<project>/`) with the full path of a folder on its first line. That project's chats then work in that folder with coding tools, and still remember the project's instructions and the earlier conversation. Delete the file to unlink.
+- **Threads sorted by last use, and pinned chats.** The sidebar lists threads by when you last used them, not when they started. Right-click a thread or chat and choose Pin to keep it at the top.
 
 ## Install
 
