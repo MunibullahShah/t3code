@@ -748,3 +748,63 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
     );
   });
 });
+
+const linkedChatLayerTest = Layer.empty.pipe(
+  Layer.provideMerge(layerProject),
+  Layer.provideMerge(WorkspacePaths.layer),
+  Layer.provideMerge(VcsDriverRegistry.layer.pipe(Layer.provide(VcsProcess.layer))),
+  Layer.provideMerge(
+    ServerConfig.ServerConfig.layerTest(process.cwd(), {
+      prefix: "t3-workspace-files-linked-chat-test-",
+    }),
+  ),
+  Layer.provideMerge(NodeServices.layer),
+);
+
+it.layer(linkedChatLayerTest, { excludeTestServices: true })(
+  "WorkspaceFileSystem linked chats",
+  (it) => {
+    it.effect("reads and writes a linked chat's relative paths in its linked folder", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const { baseDir } = yield* ServerConfig.ServerConfig;
+        const path = yield* Path.Path;
+        const linkedFolder = yield* makeTempDir;
+        const project = path.join(baseDir, "chats", "projects", "everflow-1");
+        const chat = path.join(project, "gl-review-2");
+        yield* writeTextFile(project, ".claude-linked-folder", `${linkedFolder}\n`);
+        yield* writeTextFile(chat, ".claude-chat-history.md", "# Earlier\n");
+        yield* writeTextFile(linkedFolder, "raw/check.md", "# Check\n");
+
+        const read = yield* workspaceFileSystem.readFile({
+          cwd: chat,
+          relativePath: "raw/check.md",
+        });
+        expect(read.contents).toBe("# Check\n");
+
+        yield* workspaceFileSystem.writeFile({
+          cwd: chat,
+          relativePath: "raw/notes.md",
+          contents: "saved\n",
+        });
+        const fileSystem = yield* FileSystem.FileSystem;
+        expect(yield* fileSystem.readFileString(path.join(linkedFolder, "raw/notes.md"))).toBe(
+          "saved\n",
+        );
+      }),
+    );
+
+    it.effect("keeps an unlinked chat's paths in its own folder", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const { baseDir } = yield* ServerConfig.ServerConfig;
+        const path = yield* Path.Path;
+        const chat = path.join(baseDir, "chats", "projects", "plain-1", "chat-1");
+        yield* writeTextFile(chat, "note.md", "# Own\n");
+
+        const read = yield* workspaceFileSystem.readFile({ cwd: chat, relativePath: "note.md" });
+        expect(read.contents).toBe("# Own\n");
+      }),
+    );
+  },
+);
