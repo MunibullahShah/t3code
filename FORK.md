@@ -107,13 +107,15 @@ scripts/fork-sync.sh --install  # same, then build the macOS app from my-t3 and 
 
 ## Feature 2b: Linked Claude Project folders
 
-- **What:** a `.claude-linked-folder` file at a Claude Project's root (`chats/projects/<slug>-<id8>`) holds an absolute folder on its first non-blank line. That project's chats then run in that folder as coding threads with tools, instead of tool-less chats.
-- **Server:** `RuntimePolicy.ts` looks for the file in the chat's folder, then its parent, never at the chats root. A valid link sets `cwd` to the linked folder and `chatContextDir` to the chat's own folder, and drops `chatOnly`. A relative path or a missing folder logs a warning and keeps the chat tool-less.
-- **Claude:** `ClaudeAdapterV2.ts` reads memory, project and history from `chatContextDir` and appends them to the Claude Code prompt (`claudeLinkedChatPrompt`). Claude Code resumes a session by ID from any cwd, so chats already continued in T3 keep their memory.
-- **Files:** `linkedChatFolder.ts` holds the lookup, shared with `RuntimePolicy`. `WorkspaceEntries` (file tree, search), `WorkspaceFileSystem` (read, write) and `AssetAccess` (previews) map a linked chat's folder to its linked folder, so relative links and the file panel show the real project. Writes still check the chat's own folder is a known workspace first.
-- **Link or unlink:** write or delete the file. A live Claude process keeps its old folder until it restarts.
+- **What:** a `.claude-linked-folder` file at a Claude Project's root (`chats/projects/<slug>-<id8>`) holds an absolute folder on its first non-blank line. That project's chats then work in that folder as coding threads with tools, and still get the project's instructions, memory and their imported earlier conversation.
+- **How:** the linked folder becomes each chat's working folder (`worktreePath`), set through `thread.metadata.update` like a git worktree, so the app, the agent, the file panel, links, terminals and diffs all use one folder.
+  - New chats: `ThreadLaunchService` starts them in the linked folder.
+  - Existing chats: `chats/LinkedChatWorktrees.ts` runs at server startup and moves every chat of a linked project there, or back to its own folder when the link is removed (`expectedWorktreePath` guards each move; running chats wait for the next start).
+- **Context:** `RuntimePolicy` sees a chat working in its project's linked folder and sets `chatContextDir` to the chat's own folder, found by id suffix (`chatFolderSuffixes`: the Claude conversation id for imports), or the project folder for chats started in T3. `ClaudeAdapterV2` appends that context to the Claude Code prompt (`claudeLinkedChatPrompt`) and asks for absolute file paths in replies, since the agent often works from a subfolder.
+- **Lookup:** `project/linkedChatFolder.ts`, shared by all of the above. A relative path or missing folder logs a warning and leaves the project unlinked.
+- **Link or unlink:** write or delete the file, then restart T3.
 - **The user's links:** Docwise → `~/Documents/Ambeego/Docwise`, Everflow Snowflake → `~/Documents/projects/everflow-snowflake`, message replier extension → `~/Documents/projects/message replier`. The other Claude Projects stay chat-only by choice.
-- **Not yet:** no UI to set a link, and the diff and checkpoint panels may still follow the project's chat folder (unchecked).
+- **Not yet:** no UI to set a link.
 
 ## Feature 2c: Threads sorted by last use, pinned chats
 
