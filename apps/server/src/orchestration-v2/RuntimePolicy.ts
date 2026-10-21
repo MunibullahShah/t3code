@@ -87,14 +87,32 @@ export const layerFromProjectStore: Layer.Layer<
     const serverConfig = yield* Effect.serviceOption(ServerConfig.ServerConfig);
     const path = yield* Effect.serviceOption(Path.Path);
     const linkedChats = yield* makeLinkedChatFolderResolver;
-    const chatPolicy = Effect.fn("RuntimePolicyV2.chatPolicy")(function* (cwd: string) {
+    const chatPolicy = Effect.fn("RuntimePolicyV2.chatPolicy")(function* (input: {
+      readonly cwd: string;
+      readonly projectRoot: string | undefined;
+      readonly threadId: string;
+    }) {
       if (Option.isNone(serverConfig) || Option.isNone(path)) return {};
-      if (!isChatWorkspacePath(path.value, serverConfig.value.baseDir, cwd)) return {};
       const chatRoot = chatRootFor(path.value, serverConfig.value.baseDir);
-      const linkedFolder = yield* linkedChats.linkedFolder(cwd);
-      return linkedFolder === undefined
-        ? { chatOnly: true, chatRoot }
-        : { cwd: linkedFolder, chatRoot, chatContextDir: cwd };
+      const isChatPath = (dir: string) =>
+        isChatWorkspacePath(path.value, serverConfig.value.baseDir, dir);
+      if (isChatPath(input.cwd)) {
+        // A chat still in its own folder: tool-less, or redirected when its project is linked.
+        const linkedFolder = yield* linkedChats.linkedFolder(input.cwd);
+        return linkedFolder === undefined
+          ? { chatOnly: true, chatRoot }
+          : { cwd: linkedFolder, chatRoot, chatContextDir: input.cwd };
+      }
+      // A linked chat moved into its project's linked folder keeps the chat's context.
+      const projectRoot = input.projectRoot;
+      if (projectRoot === undefined || !isChatPath(projectRoot)) return {};
+      if (path.value.resolve(projectRoot) === chatRoot) return {};
+      const linkedFolder = yield* linkedChats.linkedFolder(projectRoot);
+      if (linkedFolder === undefined) return {};
+      if (path.value.resolve(input.cwd) !== path.value.resolve(linkedFolder)) return {};
+      const chatContextDir =
+        (yield* linkedChats.chatFolder(projectRoot, input.threadId)) ?? projectRoot;
+      return { chatRoot, chatContextDir };
     });
     return RuntimePolicyV2.of({
       resolve: Effect.fn("RuntimePolicyV2.resolve")(function* (input) {
@@ -103,36 +121,30 @@ export const layerFromProjectStore: Layer.Layer<
           instance === undefined
             ? undefined
             : (yield* instance.snapshot.getSnapshot).supportedRuntimeModes;
-        const cwd =
-          input.thread.worktreePath ??
-          (yield* projects.get(input.thread.projectId).pipe(
-            Effect.mapError(
-              (cause) =>
-                new RuntimePolicyResolveError({
-                  projectId: input.thread.projectId,
-                  providerInstanceId: input.modelSelection.instanceId,
-                  cause,
-                }),
-            ),
-            Effect.flatMap(
-              Option.match({
-                onNone: () =>
-                  Effect.fail(
-                    new RuntimePolicyResolveError({
-                      projectId: input.thread.projectId,
-                      providerInstanceId: input.modelSelection.instanceId,
-                      cause: "Project not found.",
-                    }),
-                  ),
-                onSome: (project) => Effect.succeed(project.workspaceRoot),
+        const project = yield* projects.get(input.thread.projectId).pipe(
+          Effect.mapError(
+            (cause) =>
+              new RuntimePolicyResolveError({
+                projectId: input.thread.projectId,
+                providerInstanceId: input.modelSelection.instanceId,
+                cause,
               }),
-            ),
-          ));
+          ),
+        );
+        const projectRoot = Option.getOrUndefined(project)?.workspaceRoot;
+        const cwd = input.thread.worktreePath ?? projectRoot;
+        if (cwd === undefined) {
+          return yield* new RuntimePolicyResolveError({
+            projectId: input.thread.projectId,
+            providerInstanceId: input.modelSelection.instanceId,
+            cause: "Project not found.",
+          });
+        }
         return ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
           runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
           interactionMode: input.thread.interactionMode,
           cwd,
-          ...(yield* chatPolicy(cwd)),
+          ...(yield* chatPolicy({ cwd, projectRoot, threadId: input.thread.id })),
         });
       }),
     });

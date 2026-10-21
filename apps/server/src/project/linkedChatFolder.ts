@@ -14,8 +14,25 @@ import {
 export interface LinkedChatFolderResolver {
   /** The folder a linked Claude Project's chat works in, when `cwd` is such a chat. */
   readonly linkedFolder: (cwd: string) => Effect.Effect<string | undefined>;
-  /** `cwd`, or the linked folder standing in for a linked chat's own folder. */
-  readonly workspaceFor: (cwd: string) => Effect.Effect<string>;
+  /**
+   * The chat's own folder inside a Claude Project's folder, where an imported
+   * chat keeps its earlier conversation. Chats started in T3 have none.
+   */
+  readonly chatFolder: (projectRoot: string, threadId: string) => Effect.Effect<string | undefined>;
+}
+
+/**
+ * Chat folders end in an id suffix: the first eight characters of the Claude
+ * conversation for imported chats, otherwise the end of the T3 thread id.
+ */
+export function chatFolderSuffixes(threadId: string): ReadonlyArray<string> {
+  const imported = /^import:claude-ai:([0-9a-f-]+)/i.exec(threadId);
+  const compact = threadId.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return [
+    ...(imported?.[1] ? [imported[1].replace(/-/g, "").slice(0, 8).toLowerCase()] : []),
+    compact.slice(-8),
+    compact,
+  ].filter((suffix, index, all) => suffix.length > 0 && all.indexOf(suffix) === index);
 }
 
 /**
@@ -59,9 +76,21 @@ export const makeLinkedChatFolderResolver: Effect.Effect<LinkedChatFolderResolve
       return undefined;
     });
 
-    return {
-      linkedFolder,
-      workspaceFor: (cwd) => linkedFolder(cwd).pipe(Effect.map((folder) => folder ?? cwd)),
-    };
+    const chatFolder = Effect.fn("LinkedChatFolder.chatFolder")(function* (
+      projectRoot: string,
+      threadId: string,
+    ) {
+      if (Option.isNone(pathService) || Option.isNone(fileSystem)) return undefined;
+      const names = yield* fileSystem.value
+        .readDirectory(projectRoot)
+        .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+      for (const suffix of chatFolderSuffixes(threadId)) {
+        const name = names.find((candidate) => candidate.toLowerCase().endsWith(`-${suffix}`));
+        if (name !== undefined) return pathService.value.join(projectRoot, name);
+      }
+      return undefined;
+    });
+
+    return { linkedFolder, chatFolder };
   },
 );

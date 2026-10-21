@@ -41,6 +41,7 @@ import * as GitWorkflow from "../git/GitWorkflowService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
+import { makeLinkedChatFolderResolver } from "../project/linkedChatFolder.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
@@ -209,6 +210,7 @@ const make = Effect.gen(function* () {
   const ids = yield* IdAllocator.IdAllocatorV2;
   const threads = yield* ThreadManagement.ThreadManagementService;
   const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
+  const linkedChats = yield* makeLinkedChatFolderResolver;
   const preparationScope = yield* Scope.make("sequential");
   const scheduledLaunches = yield* Ref.make<ReadonlySet<CommandId>>(new Set());
   yield* Effect.addFinalizer(() => Scope.close(preparationScope, Exit.void));
@@ -881,22 +883,23 @@ const make = Effect.gen(function* () {
           yield* validateReusableThread(input, candidateThreadId);
         }
 
-        const workspaceStrategy: ThreadLaunchWorkspaceStrategy =
+        const managedFolder =
           input.workspaceStrategy.type === "root" && Option.isNone(launchReceipt)
-            ? Option.match(
-                yield* managedFolders
-                  .folderForThread({
-                    projectId: input.projectId,
-                    threadId: candidateThreadId,
-                    text: input.initialMessage?.text ?? input.title,
-                  })
-                  .pipe(Effect.mapError(mapError(input, "provision-worktree", candidateThreadId))),
-                {
-                  onNone: () => input.workspaceStrategy,
-                  onSome: (worktreePath) => ({ type: "existing_worktree", worktreePath }),
-                },
-              )
-            : input.workspaceStrategy;
+            ? yield* managedFolders
+                .folderForThread({
+                  projectId: input.projectId,
+                  threadId: candidateThreadId,
+                  text: input.initialMessage?.text ?? input.title,
+                })
+                .pipe(Effect.mapError(mapError(input, "provision-worktree", candidateThreadId)))
+            : Option.none<string>();
+        // A chat in a linked Claude Project works in the linked folder from the start.
+        const linkedFolder = Option.isSome(managedFolder)
+          ? yield* linkedChats.linkedFolder(managedFolder.value)
+          : undefined;
+        const workspaceStrategy: ThreadLaunchWorkspaceStrategy = Option.isSome(managedFolder)
+          ? { type: "existing_worktree", worktreePath: linkedFolder ?? managedFolder.value }
+          : input.workspaceStrategy;
         const initialBranch = workspaceStrategy.branch ?? null;
         const initialWorktreePath =
           workspaceStrategy.type === "existing_worktree" ? workspaceStrategy.worktreePath : null;

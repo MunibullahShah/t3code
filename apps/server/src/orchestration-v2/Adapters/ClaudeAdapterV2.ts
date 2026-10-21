@@ -469,7 +469,7 @@ const present = (text: string | undefined): text is string =>
 // A linked chat keeps the Claude Code persona and tools; this introduces the
 // chat context appended after it.
 export const CLAUDE_LINKED_CHAT_PROMPT =
-  "This thread continues one of the user's Claude chats, now linked to the working folder above. Work there with your tools as in any coding session, and carry on from the chat's context below.";
+  "This thread continues one of the user's Claude chats, now linked to the working folder above. Work there with your tools as in any coding session, and carry on from the chat's context below. When you link or name a file in a reply, give its absolute path: a path relative to a subfolder you moved into won't open for the user.";
 
 function claudeChatContextSections(context: ClaudeChatContext): Array<string> {
   const sections: Array<string> = [];
