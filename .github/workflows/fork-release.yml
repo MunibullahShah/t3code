@@ -104,6 +104,9 @@ jobs:
           security import "$RUNNER_TEMP/fork-signing.p12" -k "$keychain" -P "$MAC_SELF_SIGN_PASSWORD" -T /usr/bin/codesign >/dev/null
           rm -f "$RUNNER_TEMP/fork-signing.p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" >/dev/null
+          # codesign finds private keys only in keychains on the search list. The
+          # runner is thrown away after the job, so extending its list is safe.
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           identity="$(security find-identity -p codesigning "$keychain" | awk '/[0-9]\)/ {print $2; exit}')"
           if [ -z "$identity" ]; then
             echo "::error::The signing certificate has no code-signing identity."
