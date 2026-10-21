@@ -14,6 +14,7 @@ set -euo pipefail
 FEATURE_BRANCHES=(
   "feat/claude-chat-mode:main"
   "feat/keep-awake:feat/claude-chat-mode"
+  "feat/linked-chat-folders:feat/claude-chat-mode"
 )
 INTEGRATION_BRANCH="my-t3"
 APP_NAME="T3 Code (Beta).app"

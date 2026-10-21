@@ -4,12 +4,13 @@ A personal fork of [pingdotgg/t3code](https://github.com/pingdotgg/t3code) that 
 
 ## Branches and the one rule
 
-| Branch                  | Purpose                                                                                                    |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `main`                  | Exact mirror of `pingdotgg/main`. **Never commit here.** Sync fast-forwards it, and a commit breaks that.  |
-| `feat/claude-chat-mode` | Chat mode, the Claude export import, Claude memory and Projects.                                           |
-| `feat/keep-awake`       | Keep-awake toggle. Built on `feat/claude-chat-mode`, not `main`.                                           |
-| `my-t3`                 | Integration branch: merges every feature branch. The fork's default branch. Built, installed and released. |
+| Branch                     | Purpose                                                                                                    |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `main`                     | Exact mirror of `pingdotgg/main`. **Never commit here.** Sync fast-forwards it, and a commit breaks that.  |
+| `feat/claude-chat-mode`    | Chat mode, the Claude export import, Claude memory and Projects.                                           |
+| `feat/keep-awake`          | Keep-awake toggle. Built on `feat/claude-chat-mode`, not `main`.                                           |
+| `feat/linked-chat-folders` | Links a Claude Project to a real folder. Built on `feat/claude-chat-mode`, not `main`.                     |
+| `my-t3`                    | Integration branch: merges every feature branch. The fork's default branch. Built, installed and released. |
 
 - **New features:** run `git switch -c feat/<name> main`, then add `"feat/<name>:main"` to `FEATURE_BRANCHES` at the top of `scripts/fork-sync.sh` (on `my-t3`).
 - **Fork-wide files** (this file, the multi-branch sync script, and the fork's own `README.md`) live only on `my-t3`. On a sync conflict in `README.md`, keep the fork's version.
@@ -95,6 +96,15 @@ scripts/fork-sync.sh --install  # same, then build the macOS app from my-t3 and 
 **Project membership.** Claude's export doesn't say which project a chat belongs to. `t3-project-assignments.json` (`{conversationUuid: projectUuid}`, written next to the export) puts assigned chats in their project's folder. A copy already imported into Chats is deleted (`thread.delete`) and recreated in the project **only if** its message count still equals the imported count. A chat the user has continued in T3 stays put. The user's own mapping was built from screenshots of Claude Desktop and lives at `~/Claude/Imports/t3-project-assignments.json`.
 
 **Web.** Settings → General → Chats lets you type a path or Browse (desktop folder picker). There's also the welcome wizard's import step (`ClaudeChatsImportCallout.tsx`) and the command palette. Every failure shows a toast. A silent picker failure once made the import look like it did nothing. The hook is `useClaudeExportImport`.
+
+## Feature 2b: Linked Claude Project folders
+
+- **What:** a `.claude-linked-folder` file at a Claude Project's root (`chats/projects/<slug>-<id8>`) holds an absolute folder on its first non-blank line. That project's chats then run in that folder as coding threads with tools, instead of tool-less chats.
+- **Server:** `RuntimePolicy.ts` looks for the file in the chat's folder, then its parent, never at the chats root. A valid link sets `cwd` to the linked folder and `chatContextDir` to the chat's own folder, and drops `chatOnly`. A relative path or a missing folder logs a warning and keeps the chat tool-less.
+- **Claude:** `ClaudeAdapterV2.ts` reads memory, project and history from `chatContextDir` and appends them to the Claude Code prompt (`claudeLinkedChatPrompt`). Claude Code resumes a session by ID from any cwd, so chats already continued in T3 keep their memory.
+- **Link or unlink:** write or delete the file. A live Claude process keeps its old folder until it restarts.
+- **The user's links:** Docwise → `~/Documents/Ambeego/Docwise`, Everflow Snowflake → `~/Documents/projects/everflow-snowflake`, message replier extension → `~/Documents/projects/message replier`. The other Claude Projects stay chat-only by choice.
+- **Not yet:** no UI to set a link, and the diff and checkpoint panels still follow the project's chat folder.
 
 ## Feature 3: Keep awake
 
