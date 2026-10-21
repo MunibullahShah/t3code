@@ -2380,6 +2380,23 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.notInclude(error.message, secret);
   });
 
+  it.effect("self-signs unsigned macOS builds only when an identity is configured", () =>
+    Effect.gen(function* () {
+      const withEnv = (env: Record<string, string>, signed: boolean) =>
+        createBuildConfig("mac", "dmg", "1.2.3", signed, false, undefined, undefined).pipe(
+          Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env }))),
+        );
+      const identity = { T3CODE_MAC_SELF_SIGN_IDENTITY: "T3 Fork Signing" };
+      assert.match(
+        String((yield* withEnv(identity, false)).afterPack),
+        /[\\/]scripts[\\/]self-sign-macos\.ts$/,
+      );
+      assert.isUndefined((yield* withEnv({}, false)).afterPack);
+      assert.isUndefined((yield* withEnv({ T3CODE_MAC_SELF_SIGN_IDENTITY: " " }, false)).afterPack);
+      assert.isUndefined((yield* withEnv(identity, true)).afterPack);
+    }),
+  );
+
   it.effect("adds passkey entitlements and both renderer protocols to signed macOS builds", () =>
     Effect.gen(function* () {
       const config = yield* createBuildConfig("mac", "dmg", "1.2.3", true, false, undefined, {
