@@ -140,3 +140,11 @@ describe("hostPreviewMimeTypeFromExtension for office files", () => {
     expect(hostPreviewMimeTypeFromExtension(".xls")).toBeNull();
   });
 });
+
+describe("isWorkspacePreviewEntryPath for office files", () => {
+  it("lets the viewer load workbooks and documents inside the workspace", () => {
+    expect(isWorkspacePreviewEntryPath("reports/gl-findings.xlsx")).toBe(true);
+    expect(isWorkspacePreviewEntryPath("Offer letter.DOCX")).toBe(true);
+    expect(isWorkspacePreviewEntryPath("data.xls")).toBe(false);
+  });
+});
