@@ -12,6 +12,7 @@ import {
   isWorkspaceAudioPreviewPath,
   isWorkspaceImagePreviewPath,
   isWorkspaceVideoPreviewPath,
+  workspaceOfficePreviewKind,
 } from "@t3tools/shared/filePreview";
 import { useAtomValue } from "@effect/atom-react";
 import {
@@ -81,6 +82,7 @@ import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { breadcrumbPathOf, retainedBreadcrumbTrail, trailChildOf } from "./filePath";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import { WorkspaceOfficePreview } from "./WorkspaceOfficePreview";
 import {
   type FileCommentAnnotationEntry,
   type FileCommentAnnotationGroup,
@@ -1014,6 +1016,7 @@ export default function FilePreviewPanel({
   const isMedia = isImage || isVideo || isAudio;
   const isPdf = relativePath !== null && isPdfPreviewFile(relativePath);
   const isHtml = relativePath !== null && !isPdf && isBrowserPreviewFile(relativePath);
+  const officeKind = relativePath === null ? null : workspaceOfficePreviewKind(relativePath);
   const isHostFile =
     attachment !== undefined || (relativePath !== null && isHostPath(relativePath));
   const fileAccess = useFilesystemReadAccess(environmentId);
@@ -1141,7 +1144,7 @@ export default function FilePreviewPanel({
       // Media and PDFs never show their contents, so re-reading them on every
       // workspace mutation is waste. A folder named like one still re-reads, so
       // it notices when the path becomes a file.
-      (isFolder || (!isMedia && !isPdf)) &&
+      (isFolder || (!isMedia && !isPdf && officeKind === null)) &&
       !selectedFilePending,
     mutationId: workspaceMutationId,
     refresh: file.refresh,
@@ -1355,6 +1358,18 @@ export default function FilePreviewPanel({
               alt={relativePath}
               workspaceMutationId={workspaceMutationId}
             />
+          ) : relativePath && officeKind !== null && absolutePath ? (
+            <WorkspaceOfficePreview
+              key={absolutePath}
+              environmentId={environmentId}
+              threadRef={threadRef}
+              draft={draft}
+              absolutePath={absolutePath}
+              workspaceRoot={cwd}
+              name={relativePath}
+              kind={officeKind}
+              workspaceMutationId={workspaceMutationId}
+            />
           ) : relativePath && renderBrowserFile && absolutePath ? (
             <WorkspaceBrowserPreview
               key={absolutePath}
@@ -1467,7 +1482,7 @@ export default function FilePreviewPanel({
               selectedPathRevealId={revealRequestId}
               onOpenFile={onOpenFile}
               workspaceMutationId={workspaceMutationId}
-              {...(previewPath && !isMedia && !isPdf
+              {...(previewPath && !isMedia && !isPdf && officeKind === null
                 ? { onRefreshSelectedFile: file.refresh }
                 : {})}
             />

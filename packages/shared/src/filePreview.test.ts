@@ -10,6 +10,7 @@ import {
   isWorkspaceImagePreviewPath,
   isWorkspacePreviewEntryPath,
   isWorkspaceVideoPreviewPath,
+  workspaceOfficePreviewKind,
   mediaKindFromPath,
 } from "./filePreview.ts";
 
@@ -111,5 +112,19 @@ describe("attachment preview classification", () => {
     expect(preview.truncated).toBe(true);
     expect(preview.text.endsWith("�")).toBe(false);
     expect(preview.text.length).toBe(FILE_TEXT_PREVIEW_MAX_BYTES - 1);
+  });
+});
+
+describe("workspaceOfficePreviewKind", () => {
+  it("renders Excel workbooks and Word documents", () => {
+    expect(workspaceOfficePreviewKind("reports/Q3 Budget.XLSX")).toBe("spreadsheet");
+    expect(workspaceOfficePreviewKind("/Users/me/Offer letter.docx")).toBe("word");
+  });
+
+  it("leaves formats it cannot read to the text viewer", () => {
+    expect(workspaceOfficePreviewKind("old.xls")).toBeNull();
+    expect(workspaceOfficePreviewKind("legacy.doc")).toBeNull();
+    expect(workspaceOfficePreviewKind("data.csv")).toBeNull();
+    expect(workspaceOfficePreviewKind("notes.docx.md")).toBeNull();
   });
 });

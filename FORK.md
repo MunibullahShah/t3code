@@ -11,6 +11,7 @@ A personal fork of [pingdotgg/t3code](https://github.com/pingdotgg/t3code) that 
 | `feat/keep-awake`           | Keep-awake toggle. Built on `feat/claude-chat-mode`, not `main`.                                           |
 | `feat/linked-chat-folders`  | Links a Claude Project to a real folder. Built on `feat/claude-chat-mode`, not `main`.                     |
 | `feat/sidebar-recency-pins` | Sorts threads by last use and adds chat pins. Built on `feat/claude-chat-mode`, not `main`.                |
+| `feat/office-previews`      | Excel and Word previews, Google files in the browser panel. Built on `main`.                               |
 | `my-t3`                     | Integration branch: merges every feature branch. The fork's default branch. Built, installed and released. |
 
 - **New features:** run `git switch -c feat/<name> main`, then add `"feat/<name>:main"` to `FEATURE_BRANCHES` at the top of `scripts/fork-sync.sh` (on `my-t3`).
@@ -113,6 +114,13 @@ scripts/fork-sync.sh --install  # same, then build the macOS app from my-t3 and 
 - **Code mode:** `partitionSidebarThreads` (`Sidebar.tsx`) lists active threads with `sortThreadsByLastUse` (the user's latest message, else latest activity) instead of upstream's creation/inbox order. Upstream tracks this as pingdotgg/t3code#16412. Dragging within the active list does nothing (`activeTimeOrdered: true`); pinning holds a spot, and pinned threads stay draggable.
 - **Chat mode:** right-click a chat for Pin/Unpin (`openChatMenu` in `ChatSidebar.tsx`, one handler for all rows). `buildChatSidebarModel` returns `pinned` chats in pin order and removes them from their project and loose lists.
 - **Merging upstream:** `Sidebar.tsx` is the hotspot. Keep upstream's change, then re-apply the single `sortThreadsByLastUse(active)` sort and `activeTimeOrdered: true` at both `planSidebarThreadDrop` call sites.
+
+## Feature 2d: Excel and Word previews, Google files beside the chat
+
+- **Previews:** `WorkspaceOfficePreview.tsx` renders `.xlsx` as a table with a tab per sheet (`read-excel-file`) and `.docx` as a page in a `sandbox=""` frame whose CSP blocks scripts and network (`mammoth`). Both load lazily. `workspaceOfficePreviewKind` (`@t3tools/shared/filePreview`) picks them; `FilePreviewPanel.tsx` routes them before the text-read error branch.
+- **Google files:** `T3_CODE_GOOGLE_FILES_INSTRUCTIONS` (provider-core `orchestrationInstructions.ts`) tells Claude threads with T3's tools to `preview_open` any Google Sheet, Doc or Slides file they work on. Claude only; other providers don't get it.
+- **Google connectors need a one-time sign-in in Claude Code:** run `claude`, then `/mcp`, and authenticate each `claude.ai Google …` server. Until then T3 sessions report them as `needs-auth`. Drive was already signed in on 2026-10-21; Sheets, Docs, Slides, Gmail and Calendar were not.
+- **Merging upstream:** `ClaudeAdapterV2.ts` `systemPrompt` keeps both fork additions: the chat ternary and the Google files text after `T3_CODE_ORCHESTRATION_INSTRUCTIONS`.
 
 ## Feature 3: Keep awake
 
