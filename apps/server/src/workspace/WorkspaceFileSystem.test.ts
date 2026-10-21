@@ -180,6 +180,34 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
       }),
     );
 
+    it.effect("opens a relative link from a subfolder when exactly one file matches", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "everflow-workspace/knowledge-base/raw/gaps.md", "# Gaps\n");
+
+        const result = yield* workspaceFileSystem.readFile({ cwd, relativePath: "raw/gaps.md" });
+
+        expect(result.relativePath).toBe("everflow-workspace/knowledge-base/raw/gaps.md");
+        expect(result.contents).toBe("# Gaps\n");
+      }),
+    );
+
+    it.effect("keeps a missing relative link an error when several files match", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "a/raw/notes.md", "a\n");
+        yield* writeTextFile(cwd, "b/raw/notes.md", "b\n");
+
+        const error = yield* workspaceFileSystem
+          .readFile({ cwd, relativePath: "raw/notes.md" })
+          .pipe(Effect.flip);
+
+        expect(error._tag).toBe("WorkspaceFileSystemOperationError");
+      }),
+    );
+
     it.effect("reads host files outside the workspace root by absolute path", () =>
       Effect.gen(function* () {
         const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;

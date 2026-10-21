@@ -324,9 +324,9 @@ export const make = Effect.gen(function* () {
     };
   });
 
-  const readFile: WorkspaceFileSystem["Service"]["readFile"] = Effect.fn(
-    "WorkspaceFileSystem.readFile",
-  )(function* (input) {
+  const readFileExact = Effect.fn("WorkspaceFileSystem.readFileExact")(function* (
+    input: ProjectReadFileInput,
+  ) {
     const target = yield* resolveReadTarget(input);
     const absentResult = {
       relativePath: target.relativePath,
@@ -519,6 +519,50 @@ export const make = Effect.gen(function* () {
       });
     }
     return { relativePath: target.relativePath, realTargetPath };
+  });
+
+  /**
+   * Fork: an agent often links a file relative to the subfolder it was working
+   * in, not the thread's folder. When such a path is missing, open the one file
+   * in the workspace whose path ends with it. Several matches stay an error.
+   */
+  const findBySuffix = Effect.fn("WorkspaceFileSystem.findBySuffix")(function* (
+    input: ProjectReadFileInput,
+  ) {
+    const wanted = input.relativePath.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+    if (wanted.length === 0 || path.isAbsolute(wanted) || wanted.startsWith("~/")) {
+      return undefined;
+    }
+    const name = wanted.split("/").at(-1) ?? wanted;
+    const found = yield* workspaceEntries
+      .search({ cwd: input.cwd, query: name, limit: 50, kind: "file" })
+      .pipe(Effect.option);
+    if (found._tag === "None") return undefined;
+    const matches = found.value.entries.filter(
+      (entry) => entry.path === wanted || entry.path.endsWith(`/${wanted}`),
+    );
+    return matches.length === 1 ? matches[0]?.path : undefined;
+  });
+
+  const readFile: WorkspaceFileSystem["Service"]["readFile"] = Effect.fn(
+    "WorkspaceFileSystem.readFile",
+  )(function* (input) {
+    return yield* readFileExact(input).pipe(
+      Effect.catchIf(
+        (error) =>
+          error._tag === "WorkspaceFileSystemOperationError" &&
+          error.operation === "realpath-target" &&
+          (error.cause as NodeJS.ErrnoException | undefined)?.code === "ENOENT",
+        (error) =>
+          findBySuffix(input).pipe(
+            Effect.flatMap((relativePath) =>
+              relativePath === undefined
+                ? Effect.fail(error)
+                : readFileExact({ ...input, relativePath }),
+            ),
+          ),
+      ),
+    );
   });
 
   const writeFile: WorkspaceFileSystem["Service"]["writeFile"] = Effect.fn(
