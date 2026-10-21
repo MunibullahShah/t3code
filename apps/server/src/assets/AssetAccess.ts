@@ -60,6 +60,7 @@ import * as ServerConfig from "../config.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
+import { makeLinkedChatFolderResolver } from "../project/linkedChatFolder.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 import { extractIcnsPng } from "./icns.ts";
@@ -538,15 +539,19 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
           resource: input.resource,
         });
       }
-      const workspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(input.workspaceRoot).pipe(
-        Effect.mapError(
-          (cause) =>
-            new AssetWorkspaceRootNormalizationError({
-              resource: input.resource,
-              cause,
-            }),
-        ),
-      );
+      // A linked chat's workspace files live in its linked folder.
+      const linkedChats = yield* makeLinkedChatFolderResolver;
+      const workspaceRoot = yield* workspacePaths
+        .normalizeWorkspaceRoot(yield* linkedChats.workspaceFor(input.workspaceRoot))
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new AssetWorkspaceRootNormalizationError({
+                resource: input.resource,
+                cause,
+              }),
+          ),
+        );
       const finalized = yield* finalizeWorkspaceFileAsset({
         workspaceRoot,
         requestedPath: input.resource.path,
@@ -574,15 +579,18 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
         imageDimensions = finalized.imageDimensions;
         break;
       }
-      const workspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(draftWorkspaceRoot).pipe(
-        Effect.mapError(
-          (cause) =>
-            new AssetWorkspaceRootNormalizationError({
-              resource: input.resource,
-              cause,
-            }),
-        ),
-      );
+      const linkedChats = yield* makeLinkedChatFolderResolver;
+      const workspaceRoot = yield* workspacePaths
+        .normalizeWorkspaceRoot(yield* linkedChats.workspaceFor(draftWorkspaceRoot))
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new AssetWorkspaceRootNormalizationError({
+                resource: input.resource,
+                cause,
+              }),
+          ),
+        );
       const finalized = yield* finalizeWorkspaceFileAsset({
         workspaceRoot,
         requestedPath: input.resource.path,
