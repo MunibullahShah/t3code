@@ -7,13 +7,19 @@ import {
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "../config.ts";
-import { chatRootFor, isChatWorkspacePath } from "../project/chatProject.ts";
+import {
+  CHAT_LINKED_FOLDER_FILE,
+  chatRootFor,
+  isChatWorkspacePath,
+  parseLinkedFolder,
+} from "../project/chatProject.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProjectStore from "./ProjectStore.ts";
@@ -85,10 +91,47 @@ export const layerFromProjectStore: Layer.Layer<
     // Optional so policy tests and embedders without a data dir keep working.
     const serverConfig = yield* Effect.serviceOption(ServerConfig.ServerConfig);
     const path = yield* Effect.serviceOption(Path.Path);
-    const isChatCwd = (cwd: string) =>
-      Option.isSome(serverConfig) &&
-      Option.isSome(path) &&
-      isChatWorkspacePath(path.value, serverConfig.value.baseDir, cwd);
+    const fileSystem = yield* Effect.serviceOption(FileSystem.FileSystem);
+    // A Claude Project's chats sit one folder below the project, so the link
+    // file is looked up in the chat's folder, then its parent. The chats root
+    // itself is never a project, so a stray file there links nothing.
+    const linkedChatFolder = Effect.fn("RuntimePolicyV2.linkedChatFolder")(function* (
+      pathOps: Path.Path,
+      chatRoot: string,
+      cwd: string,
+    ) {
+      if (Option.isNone(fileSystem)) return undefined;
+      const candidates = [cwd, pathOps.dirname(cwd)].filter(
+        (dir) => pathOps.resolve(dir) !== chatRoot,
+      );
+      for (const dir of candidates) {
+        const text = yield* fileSystem.value
+          .readFileString(pathOps.join(dir, CHAT_LINKED_FOLDER_FILE))
+          .pipe(Effect.option);
+        if (Option.isNone(text)) continue;
+        const folder = parseLinkedFolder(pathOps, text.value);
+        if (folder === undefined) {
+          yield* Effect.logWarning("Ignoring a chat link file without an absolute path", { dir });
+          return undefined;
+        }
+        const info = yield* fileSystem.value.stat(folder).pipe(Effect.option);
+        if (Option.isNone(info) || info.value.type !== "Directory") {
+          yield* Effect.logWarning("Ignoring a chat link to a missing folder", { dir, folder });
+          return undefined;
+        }
+        return folder;
+      }
+      return undefined;
+    });
+    const chatPolicy = Effect.fn("RuntimePolicyV2.chatPolicy")(function* (cwd: string) {
+      if (Option.isNone(serverConfig) || Option.isNone(path)) return {};
+      if (!isChatWorkspacePath(path.value, serverConfig.value.baseDir, cwd)) return {};
+      const chatRoot = chatRootFor(path.value, serverConfig.value.baseDir);
+      const linkedFolder = yield* linkedChatFolder(path.value, chatRoot, cwd);
+      return linkedFolder === undefined
+        ? { chatOnly: true, chatRoot }
+        : { cwd: linkedFolder, chatRoot, chatContextDir: cwd };
+    });
     return RuntimePolicyV2.of({
       resolve: Effect.fn("RuntimePolicyV2.resolve")(function* (input) {
         const instance = yield* providerInstances.getInstance(input.modelSelection.instanceId);
@@ -125,9 +168,7 @@ export const layerFromProjectStore: Layer.Layer<
           runtimeMode: providerRuntimeMode(input.thread.runtimeMode, supportedRuntimeModes),
           interactionMode: input.thread.interactionMode,
           cwd,
-          ...(isChatCwd(cwd) && Option.isSome(serverConfig) && Option.isSome(path)
-            ? { chatOnly: true, chatRoot: chatRootFor(path.value, serverConfig.value.baseDir) }
-            : {}),
+          ...(yield* chatPolicy(cwd)),
         });
       }),
     });

@@ -463,8 +463,13 @@ const CHAT_PROJECT_CONTEXT_CHARS = 100_000;
 const present = (text: string | undefined): text is string =>
   text !== undefined && text.trim().length > 0;
 
-export function claudeChatSystemPrompt(context: ClaudeChatContext): string {
-  const sections = [CLAUDE_CHAT_SYSTEM_PROMPT];
+// A linked chat keeps the Claude Code persona and tools; this introduces the
+// chat context appended after it.
+export const CLAUDE_LINKED_CHAT_PROMPT =
+  "This thread continues one of the user's Claude chats, now linked to the working folder above. Work there with your tools as in any coding session, and carry on from the chat's context below.";
+
+function claudeChatContextSections(context: ClaudeChatContext): Array<string> {
+  const sections: Array<string> = [];
   if (present(context.memory)) {
     sections.push(
       "What you remember about the user from past conversations on claude.ai. Use it naturally where it helps; don't recite it.",
@@ -483,7 +488,17 @@ export function claudeChatSystemPrompt(context: ClaudeChatContext): string {
       `<earlier_conversation>\n${truncateChatHistory(context.history)}\n</earlier_conversation>`,
     );
   }
-  return sections.join("\n\n");
+  return sections;
+}
+
+export function claudeChatSystemPrompt(context: ClaudeChatContext): string {
+  return [CLAUDE_CHAT_SYSTEM_PROMPT, ...claudeChatContextSections(context)].join("\n\n");
+}
+
+/** Text appended to the Claude Code prompt for a linked chat, if it has any context. */
+export function claudeLinkedChatPrompt(context: ClaudeChatContext): string | undefined {
+  const sections = claudeChatContextSections(context);
+  return sections.length === 0 ? undefined : [CLAUDE_LINKED_CHAT_PROMPT, ...sections].join("\n\n");
 }
 
 function claudeAgentSdkQueryToolsForSdk(
@@ -1310,7 +1325,10 @@ export function makeClaudeQueryOptions(input: {
   readonly supportedDialogKinds?: ClaudeQueryOptions["supportedDialogKinds"];
   readonly allowDangerouslySkipPermissions?: boolean;
   readonly chatOnly?: boolean;
-  /** Memory, Claude Project context and an imported chat's earlier conversation. */
+  /**
+   * Memory, Claude Project context and an imported chat's earlier conversation:
+   * the whole prompt for a chat, appended to Claude Code's for a linked chat.
+   */
   readonly chatContext?: ClaudeChatContext;
   readonly appendSystemPromptFileText?: string;
 }): ClaudeAgentSdkQueryOptions {
@@ -1413,6 +1431,11 @@ export function makeClaudeQueryOptions(input: {
               buildRuntimeInstructions({ harness: "Claude Code" }) +
                 (input.mcpServers === undefined ? "" : T3_CODE_ORCHESTRATION_INSTRUCTIONS),
               ...launchAppendSystemPrompt,
+              ...(input.chatContext === undefined
+                ? []
+                : [claudeLinkedChatPrompt(input.chatContext)].filter(
+                    (text): text is string => text !== undefined,
+                  )),
             ].join("\n\n"),
           },
     ...(Object.keys(extraArgs).length === 0 ? {} : { extraArgs }),
@@ -9220,20 +9243,24 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               : fileSystem
                   .readFileString(path.join(dir, file))
                   .pipe(Effect.option, Effect.map(Option.getOrUndefined));
-          const chatContext: ClaudeChatContext | undefined =
+          // A linked chat works in a real folder but keeps its context files in
+          // its own chat folder.
+          const chatContextDir =
             queryPolicy.chatOnly === true
+              ? turnInput.runtimePolicy.cwd
+              : turnInput.runtimePolicy.chatContextDir;
+          const chatContext: ClaudeChatContext | undefined =
+            queryPolicy.chatOnly === true || chatContextDir != null
               ? {
                   memory: yield* readOptional(turnInput.runtimePolicy.chatRoot, CHAT_MEMORY_FILE),
                   // A project's chats sit in folders inside the project's folder.
                   project:
-                    (yield* readOptional(turnInput.runtimePolicy.cwd, CHAT_PROJECT_CONTEXT_FILE)) ??
+                    (yield* readOptional(chatContextDir, CHAT_PROJECT_CONTEXT_FILE)) ??
                     (yield* readOptional(
-                      turnInput.runtimePolicy.cwd === null
-                        ? null
-                        : path.dirname(turnInput.runtimePolicy.cwd),
+                      chatContextDir == null ? null : path.dirname(chatContextDir),
                       CHAT_PROJECT_CONTEXT_FILE,
                     )),
-                  history: yield* readOptional(turnInput.runtimePolicy.cwd, CHAT_HISTORY_FILE),
+                  history: yield* readOptional(chatContextDir, CHAT_HISTORY_FILE),
                 }
               : undefined;
           const queryOptions = makeClaudeQueryOptions({

@@ -306,6 +306,29 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
     );
   });
 
+  it("appends a linked chat's context to the Claude Code prompt", () => {
+    const options = ClaudeAdapterV2.makeClaudeQueryOptions({
+      modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+      nativeThreadId: "linked-chat-thread",
+      resume: false,
+      cwd: "/workspace",
+      chatContext: {
+        project: "## Project instructions\n\nBe concise.",
+        history: "# Trip\n\n### User\n\nPlan Lisbon",
+      },
+    });
+    const systemPrompt = options.systemPrompt as { type: string; preset: string; append: string };
+    assert.include(systemPrompt, { type: "preset", preset: "claude_code" });
+    assert.include(systemPrompt.append, ClaudeAdapterV2.CLAUDE_LINKED_CHAT_PROMPT);
+    assert.include(
+      systemPrompt.append,
+      "<project>\n## Project instructions\n\nBe concise.\n</project>",
+    );
+    assert.include(systemPrompt.append, "<earlier_conversation>\n# Trip");
+    assert.notInclude(systemPrompt.append, ClaudeAdapterV2.CLAUDE_CHAT_SYSTEM_PROMPT);
+    assert.isUndefined(ClaudeAdapterV2.claudeLinkedChatPrompt({ history: " " }));
+  });
+
   it("keeps the Claude Code persona for coding threads", () => {
     const options = ClaudeAdapterV2.makeClaudeQueryOptions({
       modelSelection: CLAUDE_TEST_MODEL_SELECTION,
