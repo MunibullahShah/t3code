@@ -215,10 +215,16 @@ export function isWorkspaceAudioPreviewPath(path: string): boolean {
 }
 
 export function isWorkspacePreviewEntryPath(path: string): boolean {
-  return isWorkspaceBrowserPreviewPath(path) || isWorkspaceImagePreviewPath(path);
+  return (
+    isWorkspaceBrowserPreviewPath(path) ||
+    isWorkspaceImagePreviewPath(path) ||
+    workspaceOfficePreviewKind(path) !== null
+  );
 }
 
 export type WorkspaceOfficePreviewKind = "spreadsheet" | "word";
+
+export const WORKSPACE_OFFICE_PREVIEW_EXTENSIONS = [".xlsx", ".docx"] as const;
 
 /** Office files that the file viewer renders in the browser instead of reading as text. */
 export function workspaceOfficePreviewKind(path: string): WorkspaceOfficePreviewKind | null {
