@@ -10,7 +10,7 @@ My build of [T3 Code](https://github.com/pingdotgg/t3code), with these additions
 ## Install
 
 1. Download **{{ASSET}}** below, open it, and drag T3 Code into Applications.
-2. The first time, **right-click T3 Code → Open**, then confirm. The app isn't signed by Apple, so a normal double-click is blocked once.
+2. The first time, **right-click T3 Code → Open**, then confirm. The app isn't signed by Apple, so a normal double-click is blocked once. After that, T3 Code tells you when a new version is out and installs it for you.
 3. Install and sign in to at least one agent: [Claude Code](https://claude.com/product/claude-code) (`claude auth login`) and/or [Codex CLI](https://developers.openai.com/codex/cli) (`codex login`).
 
 Requirements: a Mac with Apple Silicon (M1 or later).

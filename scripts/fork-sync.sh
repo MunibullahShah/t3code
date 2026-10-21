@@ -17,6 +17,7 @@ FEATURE_BRANCHES=(
   "feat/linked-chat-folders:feat/claude-chat-mode"
   "feat/sidebar-recency-pins:feat/claude-chat-mode"
   "feat/office-previews:main"
+  "feat/self-signed-updates:main"
 )
 INTEGRATION_BRANCH="my-t3"
 APP_NAME="T3 Code (Beta).app"

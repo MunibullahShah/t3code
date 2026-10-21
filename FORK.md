@@ -12,6 +12,7 @@ A personal fork of [pingdotgg/t3code](https://github.com/pingdotgg/t3code) that 
 | `feat/linked-chat-folders`  | Links a Claude Project to a real folder. Built on `feat/claude-chat-mode`, not `main`.                     |
 | `feat/sidebar-recency-pins` | Sorts threads by last use and adds chat pins. Built on `feat/claude-chat-mode`, not `main`.                |
 | `feat/office-previews`      | Excel and Word previews, Google files in the browser panel. Built on `main`.                               |
+| `feat/self-signed-updates`  | Signs macOS builds with the fork's self-signed certificate so updates install. Built on `main`.            |
 | `my-t3`                     | Integration branch: merges every feature branch. The fork's default branch. Built, installed and released. |
 
 - **New features:** run `git switch -c feat/<name> main`, then add `"feat/<name>:main"` to `FEATURE_BRANCHES` at the top of `scripts/fork-sync.sh` (on `my-t3`).
@@ -33,8 +34,12 @@ scripts/fork-sync.sh --install  # same, then build the macOS app from my-t3 and 
   - Then run `node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --output-dir release`.
   - The build is unsigned, so `xattr -dr com.apple.quarantine` it after copying into `/Applications`.
 - **Releases:**
-  - Automatic: `.github/workflows/fork-release.yml` runs on every push to `my-t3` (feature merges and syncs) that changes more than Markdown or `docs/`. It builds the unsigned arm64 DMG on a `macos-15` runner and publishes `my-t3-YYYY.MM.DD`, adding `.1`, `.2` … when that day's tag exists. Release notes come from `.github/fork-release-notes.md`; update it when a feature is added. Run it by hand from the Actions tab (`workflow_dispatch`).
-  - By hand: `gh release create my-t3-YYYY.MM.DD <dmg> --target my-t3 --repo MunibullahShah/t3code`.
+  - Automatic: `.github/workflows/fork-release.yml` runs on every push to `my-t3` (feature merges and syncs) that changes more than Markdown or `docs/`. It builds the arm64 DMG on a `macos-15` runner and publishes `my-t3-YYYY.MM.DD`, adding `.1`, `.2` … when that day's tag exists. Release notes come from `.github/fork-release-notes.md`; update it when a feature is added. Run it by hand from the Actions tab (`workflow_dispatch`).
+  - **In-app updates:** each release gets version `major.minor.YYYYMMDDNN` (upstream's major.minor from `apps/desktop/package.json`) and uploads `latest-mac.yml`, the zip and blockmaps. GitHub-built copies check this repository's latest release and offer the update in the app. Copies built on a Mac by hand have no update feed.
+  - **Signing:** macOS installs an update only when it meets the running app's signature requirement, which ad-hoc builds can't. Releases are signed with the fork's self-signed certificate (`scripts/self-sign-macos.ts`, an afterPack hook enabled by `T3CODE_MAC_SELF_SIGN_IDENTITY`). The workflow loads it from the `MAC_SELF_SIGN_P12` and `MAC_SELF_SIGN_PASSWORD` secrets and refuses to release without them.
+  - **Never lose or replace that certificate.** A build signed with any other certificate can't update copies signed with this one; their users would have to reinstall by hand. The originals are in `~/.config/t3-fork-signing/` on the user's Mac (`fork-signing.p12`, `password.txt`, `cert.pem`, valid until 2046) and should be backed up to a password manager.
+  - First install still needs right-click → Open, since the certificate isn't Apple's.
+  - By hand: `gh release create my-t3-YYYY.MM.DD <dmg> --target my-t3 --repo MunibullahShah/t3code`. A hand-made release has no updater files, so installed copies won't see it.
   - **Never tag `v*`.** Upstream's `release.yml` fires on `v*.*.*` tags.
   - Check runs with `gh run list --repo MunibullahShah/t3code --workflow fork-release.yml`.
 - **Plugin quirk:** an `everything-claude-code` hook blocks any shell command that contains `git commit` plus a `-n` flag anywhere (for example `bash -n`, `grep -n`). Run commits in their own command.
