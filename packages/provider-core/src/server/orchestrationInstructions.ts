@@ -60,6 +60,13 @@ Do not switch to global browser skills, Chrome, Node REPL browser automation, st
 - preview calls on an open tab have failed twice on the same step (timeouts, \`chrome-error://\` pages, a different client answering). Quote the raw error and switch without asking the user which browser to use.
 `;
 
+/**
+ * Fork addition: the user follows Google files beside the chat, as in Claude Desktop.
+ */
+export const T3_CODE_GOOGLE_FILES_INSTRUCTIONS = `<google_files>
+When you read, create or edit a Google Sheet, Doc or Slides file, open it in the thread's browser so the user sees it beside the chat: call \`preview_open\` once with the file's docs.google.com URL. Keep reading and editing it through the Google connector tools, not the browser. Skip this when the \`preview_*\` tools are unavailable, and don't reopen a file that's already open there.
+</google_files>`;
+
 const T3_CODE_ACP_DEFAULT_MODE_INSTRUCTIONS = `## T3 Code interaction mode: Default
 
 Prefer making reasonable assumptions and carrying out the user's request. Ask a concise question only when a missing user decision would materially change the result. Treat this mode as active until T3 Code supplies a different interaction-mode instruction.`;

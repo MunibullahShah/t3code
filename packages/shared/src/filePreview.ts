@@ -209,3 +209,12 @@ export function isWorkspaceAudioPreviewPath(path: string): boolean {
 export function isWorkspacePreviewEntryPath(path: string): boolean {
   return isWorkspaceBrowserPreviewPath(path) || isWorkspaceImagePreviewPath(path);
 }
+
+export type WorkspaceOfficePreviewKind = "spreadsheet" | "word";
+
+/** Office files that the file viewer renders in the browser instead of reading as text. */
+export function workspaceOfficePreviewKind(path: string): WorkspaceOfficePreviewKind | null {
+  if (hasPreviewExtension(path, [".xlsx"])) return "spreadsheet";
+  if (hasPreviewExtension(path, [".docx"])) return "word";
+  return null;
+}
