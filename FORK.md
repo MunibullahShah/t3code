@@ -104,7 +104,7 @@ scripts/fork-sync.sh --install  # same, then build the macOS app from my-t3 and 
 - **Claude:** `ClaudeAdapterV2.ts` reads memory, project and history from `chatContextDir` and appends them to the Claude Code prompt (`claudeLinkedChatPrompt`). Claude Code resumes a session by ID from any cwd, so chats already continued in T3 keep their memory.
 - **Link or unlink:** write or delete the file. A live Claude process keeps its old folder until it restarts.
 - **The user's links:** Docwise → `~/Documents/Ambeego/Docwise`, Everflow Snowflake → `~/Documents/projects/everflow-snowflake`, message replier extension → `~/Documents/projects/message replier`. The other Claude Projects stay chat-only by choice.
-- **Not yet:** no UI to set a link, and the diff and checkpoint panels still follow the project's chat folder.
+- **Not yet:** no UI to set a link, and the diff and checkpoint panels may still follow the project's chat folder (unchecked).
 
 ## Feature 3: Keep awake
 
