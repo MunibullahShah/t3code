@@ -1,6 +1,6 @@
 import { isChatProject, isScratchProject } from "@t3tools/client-runtime/state/projects";
 
-import { sortChatsByRecency } from "../Sidebar.logic";
+import { sortPinnedThreadsForSidebar, sortThreadsByLastUse } from "../Sidebar.logic";
 
 /** Claude Desktop shows this many chats under a project before "View all". */
 export const CHAT_PROJECT_PREVIEW_COUNT = 4;
@@ -14,6 +14,8 @@ interface ChatSidebarThread {
   readonly latestUserMessageAt: string | null;
   readonly updatedAt: string;
   readonly createdAt: string;
+  readonly pinnedAt?: string | null | undefined;
+  readonly pinOrderKey?: string | null | undefined;
   readonly lineage: { readonly relationshipToParent: string | null };
 }
 
@@ -31,6 +33,8 @@ export interface ChatSidebarProjectGroup<T, P> {
 }
 
 export interface ChatSidebarModel<T, P> {
+  /** Pinned chats from every project, in pin order; they leave their usual place. */
+  readonly pinned: ReadonlyArray<T>;
   /** Claude Projects, most recently used first; empty ones last, by name. */
   readonly projects: ReadonlyArray<ChatSidebarProjectGroup<T, P>>;
   /** Chats outside any project, most recent first. */
@@ -41,8 +45,8 @@ const projectKey = (item: { readonly environmentId: string; readonly id: string 
   `${item.environmentId}:${item.id}`;
 
 /**
- * Lays chats out like Claude Desktop: each Claude Project with its chats, then
- * the chats that belong to no project. A search keeps only matching chats and
+ * Lays chats out like Claude Desktop: pinned chats, each Claude Project with
+ * its chats, then the chats that belong to no project. A search keeps only matching chats and
  * the projects that hold them or whose name matches.
  */
 export function buildChatSidebarModel<
@@ -66,10 +70,20 @@ export function buildChatSidebarModel<
 
   const chatsByProject = new Map<string, T[]>();
   const looseChats: T[] = [];
+  const pinned: T[] = [];
   for (const thread of input.threads) {
     if (thread.archivedAt !== null || thread.lineage.relationshipToParent === "subagent") continue;
     const key = `${thread.environmentId}:${thread.projectId}`;
-    if (generalKeys.has(key)) {
+    if (thread.pinnedAt != null) {
+      const projectTitle = projectsByKey.get(key)?.title;
+      const isChat = generalKeys.has(key) || projectTitle !== undefined;
+      if (
+        isChat &&
+        (matches(thread.title) || (projectTitle !== undefined && matches(projectTitle)))
+      ) {
+        pinned.push(thread);
+      }
+    } else if (generalKeys.has(key)) {
       if (matches(thread.title)) looseChats.push(thread);
     } else if (projectsByKey.has(key)) {
       const projectMatches = matches(projectsByKey.get(key)!.title);
@@ -83,7 +97,7 @@ export function buildChatSidebarModel<
     .map(([key, project]) => ({
       key,
       project,
-      chats: sortChatsByRecency(chatsByProject.get(key) ?? []),
+      chats: sortThreadsByLastUse(chatsByProject.get(key) ?? []),
     }))
     .filter(
       (group) => query.length === 0 || group.chats.length > 0 || matches(group.project.title),
@@ -98,5 +112,9 @@ export function buildChatSidebarModel<
     (left, right) =>
       latest(right) - latest(left) || left.project.title.localeCompare(right.project.title),
   );
-  return { projects, chats: sortChatsByRecency(looseChats) };
+  return {
+    pinned: sortPinnedThreadsForSidebar(pinned),
+    projects,
+    chats: sortThreadsByLastUse(looseChats),
+  };
 }

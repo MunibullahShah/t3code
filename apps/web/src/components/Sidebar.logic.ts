@@ -997,8 +997,8 @@ const chatActivityMs = (thread: {
   return Number.isNaN(at) ? 0 : at;
 };
 
-/** Chat mode lists chats like Claude Desktop: most recent conversation first. */
-export function sortChatsByRecency<
+/** Most recently used first, like Claude Desktop: the user's last message, else the last activity. */
+export function sortThreadsByLastUse<
   T extends {
     readonly latestUserMessageAt: string | null;
     readonly updatedAt: string;

@@ -4,15 +4,22 @@ import {
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+import {
+  isAtomCommandInterrupted,
+  settlePromise,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
-import { MessageCircleIcon, PlusIcon, SearchIcon, SquareLibraryIcon } from "lucide-react";
-import { useState } from "react";
+import { MessageCircleIcon, PinIcon, PlusIcon, SearchIcon, SquareLibraryIcon } from "lucide-react";
+import { type MouseEvent, useState } from "react";
 
 import { isElectron } from "../../env";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { useScratchProject } from "../../hooks/useScratchProject";
+import { useThreadActions } from "../../hooks/useThreadActions";
 import { useThreadRouteTarget } from "../../hooks/useThreadRouteTarget";
+import { readLocalApi } from "../../localApi";
 import { useProjects, useServerConfigs, useThreadShells } from "../../state/entities";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import {
@@ -27,6 +34,7 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "../ui/sidebar";
+import { stackedThreadToast, toastManager } from "../ui/toast";
 import { buildChatSidebarModel, CHAT_PROJECT_PREVIEW_COUNT } from "./chatSidebar.logic";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./SidebarChrome";
 
@@ -45,6 +53,7 @@ export default function ChatSidebar() {
   const routeTarget = useThreadRouteTarget();
   const handleNewThread = useNewThreadHandler();
   const { chatEnvironmentId, startChatThread } = useScratchProject();
+  const { pinThread, confirmAndUnpinThread } = useThreadActions();
   const { isMobile, setOpenMobile } = useSidebar();
   const [query, setQuery] = useState("");
   const [expandedProjects, setExpandedProjects] = useState<ReadonlySet<string>>(new Set());
@@ -79,6 +88,45 @@ export default function ChatSidebar() {
     closeOnMobile();
     void handleNewThread(scopeProjectRef(project.environmentId, project.id));
   };
+  // One handler for every row, as in Code mode: a menu hook per row would
+  // subscribe each of the hundreds of imported chats to the same stores.
+  const openChatMenu = (thread: EnvironmentThreadShell, event: MouseEvent) => {
+    const api = readLocalApi();
+    const supportsPinning =
+      serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPinning === true;
+    if (api === undefined || !supportsPinning) return;
+    event.preventDefault();
+    const pinned = thread.pinnedAt != null;
+    const position = { x: event.clientX, y: event.clientY };
+    void (async () => {
+      const clicked = await settlePromise(() =>
+        api.contextMenu.show(
+          [
+            pinned
+              ? { id: "unpin" as const, label: "Unpin chat", icon: "pin-off" }
+              : { id: "pin" as const, label: "Pin chat", icon: "pin" },
+          ],
+          position,
+        ),
+      );
+      if (clicked._tag === "Failure" || clicked.value === null) return;
+      const threadRef = scopeThreadRef(thread.environmentId, thread.id);
+      const result =
+        clicked.value === "pin"
+          ? await pinThread(threadRef)
+          : await confirmAndUnpinThread(threadRef);
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: pinned ? "Failed to unpin chat" : "Failed to pin chat",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+    })();
+  };
   const toggleExpanded = (key: string) =>
     setExpandedProjects((current) => {
       const next = new Set(current);
@@ -87,7 +135,8 @@ export default function ChatSidebar() {
       return next;
     });
   const searching = query.trim().length > 0;
-  const isEmpty = model.projects.length === 0 && model.chats.length === 0;
+  const isEmpty =
+    model.pinned.length === 0 && model.projects.length === 0 && model.chats.length === 0;
 
   return (
     <>
@@ -124,6 +173,21 @@ export default function ChatSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
 
+            {model.pinned.length > 0 ? <li aria-hidden className="h-1" /> : null}
+            {model.pinned.map((thread) => (
+              <SidebarMenuItem key={threadKeyOf(thread)}>
+                <SidebarMenuButton
+                  variant="strong"
+                  isActive={activeThreadKey === threadKeyOf(thread)}
+                  onClick={() => openThread(thread)}
+                  onContextMenu={(event) => openChatMenu(thread, event)}
+                >
+                  <PinIcon />
+                  <span>{thread.title}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+
             {model.projects.map(({ key, project, chats }) => {
               const expanded = searching || expandedProjects.has(key);
               const shown = expanded ? chats : chats.slice(0, CHAT_PROJECT_PREVIEW_COUNT);
@@ -157,6 +221,7 @@ export default function ChatSidebar() {
                           title={thread.title}
                           active={activeThreadKey === threadKeyOf(thread)}
                           onOpen={() => openThread(thread)}
+                          onMenu={(event) => openChatMenu(thread, event)}
                         />
                       ))}
                       {!searching && chats.length > CHAT_PROJECT_PREVIEW_COUNT ? (
@@ -183,6 +248,7 @@ export default function ChatSidebar() {
                   variant="strong"
                   isActive={activeThreadKey === threadKeyOf(thread)}
                   onClick={() => openThread(thread)}
+                  onContextMenu={(event) => openChatMenu(thread, event)}
                 >
                   <MessageCircleIcon />
                   <span>{thread.title}</span>
@@ -206,6 +272,7 @@ function ChatSubRow(props: {
   readonly title: string;
   readonly active: boolean;
   readonly onOpen: () => void;
+  readonly onMenu: (event: MouseEvent) => void;
 }) {
   return (
     <SidebarMenuSubItem>
@@ -214,6 +281,7 @@ function ChatSubRow(props: {
         isActive={props.active}
         className="w-full"
         onClick={props.onOpen}
+        onContextMenu={props.onMenu}
       >
         <span>{props.title}</span>
       </SidebarMenuSubButton>

@@ -83,4 +83,27 @@ describe("buildChatSidebarModel", () => {
     expect(byProjectName.projects.map((group) => group.project.title)).toEqual(["Docwise"]);
     expect(byProjectName.projects[0]?.chats.map((chat) => chat.id)).toEqual(["doc-1"]);
   });
+
+  it("lifts pinned chats out of their place into pin order, coding threads excluded", () => {
+    const pin = <T extends object>(item: T, pinOrderKey: string) => ({
+      ...item,
+      pinnedAt: "2026-10-21T00:00:00Z",
+      pinOrderKey,
+    });
+    const pinnedModel = buildChatSidebarModel({
+      threads: [
+        ...threads.filter((item) => !["loose-old", "doc-1", "code-1"].includes(item.id)),
+        pin(thread("loose-old", "chats", "2026-01-01T00:00:00Z", "Budget recall"), "b"),
+        pin(thread("doc-1", "docwise", "2026-09-01T00:00:00Z", "Typebot setup"), "a"),
+        pin(thread("code-1", "code", "2026-10-15T00:00:00Z", "Fix build"), "c"),
+      ],
+      projects,
+      chatWorkspaceRootFor: () => ROOT,
+    });
+    expect(pinnedModel.pinned.map((chat) => chat.id)).toEqual(["doc-1", "loose-old"]);
+    expect(pinnedModel.chats.map((chat) => chat.id)).toEqual(["loose-new"]);
+    expect(pinnedModel.projects.find((group) => group.project.title === "Docwise")?.chats).toEqual(
+      [],
+    );
+  });
 });
