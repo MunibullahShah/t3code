@@ -2925,6 +2925,14 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
           }
         : {}),
     };
+    // Fork: one stable self-signed identity lets macOS's updater install the
+    // next unsigned release. Apple-signed builds keep their own signing.
+    const selfSignIdentity = yield* Config.String("T3CODE_MAC_SELF_SIGN_IDENTITY").pipe(
+      Config.option,
+    );
+    if (!signed && Option.isSome(selfSignIdentity) && selfSignIdentity.value.trim()) {
+      buildConfig.afterPack = path.join(repoRoot, "scripts/self-sign-macos.ts");
+    }
   }
 
   if (platform === "mac" && target === "dmg") {
