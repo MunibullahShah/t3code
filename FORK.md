@@ -13,7 +13,7 @@ A personal fork of [pingdotgg/t3code](https://github.com/pingdotgg/t3code) that 
 | `my-t3`                    | Integration branch: merges every feature branch. The fork's default branch. Built, installed and released. |
 
 - **New features:** run `git switch -c feat/<name> main`, then add `"feat/<name>:main"` to `FEATURE_BRANCHES` at the top of `scripts/fork-sync.sh` (on `my-t3`).
-- **Fork-wide files** (this file, the multi-branch sync script, and the fork's own `README.md`) live only on `my-t3`. On a sync conflict in `README.md`, keep the fork's version.
+- **Fork-wide files** (this file, the multi-branch sync script, the fork's own `README.md`, and the release workflow with its notes) live only on `my-t3`. On a sync conflict in `README.md`, keep the fork's version.
 - **Never** push to `upstream` (its push URL is set to `DISABLED`), and don't open pull requests to pingdotgg unless the user asks.
 - **Commits:** author `Munib <munibs47@gmail.com>`, which is the email on the user's GitHub account. Keep the `Co-Authored-By: Claude …` trailer; the user chose to keep it.
 
@@ -31,9 +31,10 @@ scripts/fork-sync.sh --install  # same, then build the macOS app from my-t3 and 
   - Then run `node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --output-dir release`.
   - The build is unsigned, so `xattr -dr com.apple.quarantine` it after copying into `/Applications`.
 - **Releases:**
-  - `gh release create my-t3-YYYY.MM.DD <dmg> --target my-t3 --repo MunibullahShah/t3code`.
+  - Automatic: `.github/workflows/fork-release.yml` runs on every push to `my-t3` (feature merges and syncs) that changes more than Markdown or `docs/`. It builds the unsigned arm64 DMG on a `macos-15` runner and publishes `my-t3-YYYY.MM.DD`, adding `.1`, `.2` … when that day's tag exists. Release notes come from `.github/fork-release-notes.md`; update it when a feature is added. Run it by hand from the Actions tab (`workflow_dispatch`).
+  - By hand: `gh release create my-t3-YYYY.MM.DD <dmg> --target my-t3 --repo MunibullahShah/t3code`.
   - **Never tag `v*`.** Upstream's `release.yml` fires on `v*.*.*` tags.
-  - Actions are enabled on the fork but have never run. Check `gh api repos/MunibullahShah/t3code/actions/runs` after a release.
+  - Check runs with `gh run list --repo MunibullahShah/t3code --workflow fork-release.yml`.
 - **Plugin quirk:** an `everything-claude-code` hook blocks any shell command that contains `git commit` plus a `-n` flag anywhere (for example `bash -n`, `grep -n`). Run commits in their own command.
 
 ## Feature 1: Chat mode (Claude Desktop-style chats)

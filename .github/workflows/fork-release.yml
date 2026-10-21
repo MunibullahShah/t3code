@@ -1,0 +1,99 @@
+name: Fork release
+
+# Fork-only (lives on my-t3, see FORK.md). Every push to my-t3, which is how
+# feature merges and upstream syncs land, builds the unsigned Apple Silicon DMG
+# and publishes it as a my-t3-YYYY.MM.DD[.N] release. Never tag v*: upstream's
+# release.yml fires on those.
+
+on:
+  push:
+    branches:
+      - my-t3
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-release
+  # A newer push supersedes a build still in progress.
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Build and publish DMG
+    if: github.repository == 'MunibullahShah/t3code'
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      # Same as upstream's macOS preview: checkout's credential cleanup fails on
+      # the orphaned gitlinks in the vendored .repos tree, so fetch by hand.
+      - name: Checkout
+        shell: bash
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: false
+
+      - name: Install dependencies
+        run: vp install
+
+      # The desktop build compiles native helpers with Cargo.
+      - name: Setup Rust
+        run: rustup target add aarch64-apple-darwin
+
+      - name: Build DMG
+        run: node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --output-dir release
+
+      - name: Resolve release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="my-t3-$(date -u +%Y.%m.%d)"
+          tag="$base"
+          n=0
+          while gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; do
+            n=$((n + 1))
+            tag="$base.$n"
+          done
+          title="T3 Code (my build) — $(date -u +%Y-%m-%d)"
+          if [ "$n" -gt 0 ]; then title="$title ($((n + 1)))"; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "title=$title" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          TITLE: ${{ steps.tag.outputs.title }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg="$(ls release/*.dmg | head -n 1)"
+          asset="T3-Code-${TAG}-apple-silicon.dmg"
+          cp "$dmg" "$asset"
+          sed "s/{{ASSET}}/${asset}/g" .github/fork-release-notes.md > notes.md
+          printf '\nBuilt from branch `my-t3` at %s.\n' "$GITHUB_SHA" >> notes.md
+          gh release create "$TAG" "$asset" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TITLE" \
+            --notes-file notes.md
