@@ -57,9 +57,6 @@ jobs:
       - name: Setup Rust
         run: rustup target add aarch64-apple-darwin
 
-      - name: Build DMG
-        run: node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --output-dir release
-
       - name: Resolve release tag
         id: tag
         env:
@@ -76,23 +73,37 @@ jobs:
           done
           title="T3 Code (my build) — $(date -u +%Y-%m-%d)"
           if [ "$n" -gt 0 ]; then title="$title ($((n + 1)))"; fi
+          # Installed copies update when this version beats theirs, so it rises with
+          # every release: upstream's major.minor, then the date and that day's count.
+          base_version="$(node -p "require('./apps/desktop/package.json').version")"
+          version="${base_version%.*}.$(date -u +%Y%m%d)$(printf '%02d' "$n")"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "title=$title" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set release version
+        run: node scripts/update-release-package-versions.ts "${{ steps.tag.outputs.version }}"
+
+      # GITHUB_REPOSITORY makes the build point the app's updater at this
+      # repository's releases and write latest-mac.yml beside the DMG and zip.
+      - name: Build DMG
+        run: node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --output-dir release
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
           TITLE: ${{ steps.tag.outputs.title }}
+          VERSION: ${{ steps.tag.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
+          # The updater looks files up by the names latest-mac.yml gives them.
           dmg="$(ls release/*.dmg | head -n 1)"
-          asset="T3-Code-${TAG}-apple-silicon.dmg"
-          cp "$dmg" "$asset"
+          asset="$(basename "$dmg")"
           sed "s/{{ASSET}}/${asset}/g" .github/fork-release-notes.md > notes.md
-          printf '\nBuilt from branch `my-t3` at %s.\n' "$GITHUB_SHA" >> notes.md
-          gh release create "$TAG" "$asset" \
+          printf '\nVersion %s, built from branch `my-t3` at %s.\n' "$VERSION" "$GITHUB_SHA" >> notes.md
+          gh release create "$TAG" "$dmg" release/*.zip release/*.blockmap release/latest-mac.yml \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "$TITLE" \
