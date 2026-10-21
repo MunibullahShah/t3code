@@ -56,6 +56,11 @@ export const ProviderAdapterV2RuntimePolicy = Schema.Struct({
   chatOnly: Schema.optional(Schema.Boolean),
   /** The chats folder, where account-wide chat context such as memory lives. */
   chatRoot: Schema.optional(Schema.String),
+  /**
+   * A Claude Project chat linked to a real folder (`cwd`): the chat's own
+   * folder, whose context files Claude still reads while it works in `cwd`.
+   */
+  chatContextDir: Schema.optional(Schema.String),
 });
 export type ProviderAdapterV2RuntimePolicy = typeof ProviderAdapterV2RuntimePolicy.Type;
 

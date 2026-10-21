@@ -3,7 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 
-import { chatRootFor, isChatWorkspacePath } from "./chatProject.ts";
+import { chatRootFor, isChatWorkspacePath, parseLinkedFolder } from "./chatProject.ts";
 
 const baseDir = "/home/user/.t3";
 
@@ -28,5 +28,24 @@ it.effect("rejects other folders, look-alike prefixes and missing paths", () =>
     assert.isFalse(isChatWorkspacePath(path, baseDir, "/home/user/code/app"));
     assert.isFalse(isChatWorkspacePath(path, baseDir, null));
     assert.isFalse(isChatWorkspacePath(path, baseDir, ""));
+  }),
+);
+
+it.effect("reads a linked folder from the first non-blank line", () =>
+  withPath((path) => {
+    assert.equal(
+      parseLinkedFolder(path, "\n  /home/user/code/app/  \nignored"),
+      "/home/user/code/app",
+    );
+    assert.equal(parseLinkedFolder(path, "/home/user/My Repo\r\n"), "/home/user/My Repo");
+  }),
+);
+
+it.effect("ignores link files without an absolute path", () =>
+  withPath((path) => {
+    assert.isUndefined(parseLinkedFolder(path, ""));
+    assert.isUndefined(parseLinkedFolder(path, "   \n"));
+    assert.isUndefined(parseLinkedFolder(path, "code/app"));
+    assert.isUndefined(parseLinkedFolder(path, "~/code/app"));
   }),
 );
