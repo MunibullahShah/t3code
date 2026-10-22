@@ -131,9 +131,14 @@ interface HarnessOptions {
   readonly serverSettings?: Parameters<typeof ServerSettings.layerTest>[0];
   readonly providers?: ReadonlyArray<ServerProvider>;
   readonly git?: Partial<GitWorkflow.GitWorkflowService["Service"]>;
+  readonly workspaceRoot?: string;
 }
 
 function makeHarness(options: HarnessOptions = {}) {
+  const launchProject = {
+    ...project,
+    workspaceRoot: options.workspaceRoot ?? project.workspaceRoot,
+  };
   const layerDatabase = SqlitePersistence.layerMemory;
   const layerRegistry = ProviderAdapterRegistry.layerFromAdapters(options.adapters ?? [adapter]);
   const layerOrchestrator = ProviderReplayHarness.layerWithRegistry(
@@ -185,12 +190,12 @@ function makeHarness(options: HarnessOptions = {}) {
       getById: (id) =>
         Effect.succeed(
           id === projectId
-            ? Option.some(project)
+            ? Option.some(launchProject)
             : id === otherProjectId
               ? Option.some(otherProject)
               : Option.none(),
         ),
-      getByWorkspaceRoot: () => Effect.succeed(Option.some(project)),
+      getByWorkspaceRoot: () => Effect.succeed(Option.some(launchProject)),
       snapshot: Effect.die("unused"),
       getShell: () => Effect.die("unused"),
       listShells: () => Effect.die("unused"),
@@ -241,7 +246,7 @@ function makeHarness(options: HarnessOptions = {}) {
           ? Option.some({
               projectId,
               title: project.title,
-              workspaceRoot: project.workspaceRoot,
+              workspaceRoot: launchProject.workspaceRoot,
               defaultModelSelection: project.defaultModelSelection,
               defaultThreadEnvMode: null,
               autoPull: false,
@@ -1236,6 +1241,29 @@ it.effect("runs a Scratch thread launched at the root in its own folder", () =>
       assert.isNull(other.projection.thread.worktreePath);
     }).pipe(Effect.provide(harness.layer));
   }),
+);
+
+it.effect("starts a new chat in a linked Claude Project in the linked folder", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "launch-linked-chat-" });
+    const projectRoot = `${baseDir}/chats/projects/docwise-01a0ae65`;
+    const linkedFolder = `${baseDir}/Docwise`;
+    yield* fs.makeDirectory(projectRoot, { recursive: true });
+    yield* fs.makeDirectory(linkedFolder);
+    yield* fs.writeFileString(`${projectRoot}/.claude-linked-folder`, `${linkedFolder}\n`);
+    const harness = makeHarness({ workspaceRoot: projectRoot });
+    yield* Effect.gen(function* () {
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      const launched = yield* launches.launch(
+        launchInput({ command: "command:launch:linked", thread: "thread:launch:linked" }),
+      );
+      assert.equal(launched.projection.thread.worktreePath, linkedFolder);
+    }).pipe(
+      Effect.provide(harness.layer),
+      Effect.provide(ServerConfig.layerTest(process.cwd(), baseDir)),
+    );
+  }).pipe(Effect.provide(NodeServices.layer)),
 );
 
 // Stands `projectId` in for the Scratch project: a plain folder, not a Git

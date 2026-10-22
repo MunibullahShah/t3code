@@ -894,12 +894,19 @@ const make = Effect.gen(function* () {
                 .pipe(Effect.mapError(mapError(input, "provision-worktree", candidateThreadId)))
             : Option.none<string>();
         // A chat in a linked Claude Project works in the linked folder from the start.
-        const linkedFolder = Option.isSome(managedFolder)
-          ? yield* linkedChats.linkedFolder(managedFolder.value)
-          : undefined;
-        const workspaceStrategy: ThreadLaunchWorkspaceStrategy = Option.isSome(managedFolder)
-          ? { type: "existing_worktree", worktreePath: linkedFolder ?? managedFolder.value }
-          : input.workspaceStrategy;
+        // Claude Projects get no managed folder per chat, so their root is checked too.
+        const linkedFolder =
+          input.workspaceStrategy.type === "root" && Option.isNone(launchReceipt)
+            ? yield* linkedChats.linkedFolder(
+                Option.getOrElse(managedFolder, () => project.workspaceRoot),
+              )
+            : undefined;
+        const workspaceStrategy: ThreadLaunchWorkspaceStrategy =
+          linkedFolder !== undefined
+            ? { type: "existing_worktree", worktreePath: linkedFolder }
+            : Option.isSome(managedFolder)
+              ? { type: "existing_worktree", worktreePath: managedFolder.value }
+              : input.workspaceStrategy;
         const initialBranch = workspaceStrategy.branch ?? null;
         const initialWorktreePath =
           workspaceStrategy.type === "existing_worktree" ? workspaceStrategy.worktreePath : null;
